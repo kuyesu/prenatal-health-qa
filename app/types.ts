@@ -1,4 +1,4 @@
-export type Language = "en" | "sw" | "lg" | "ru"
+export type Language = "en"
 
 export interface Question {
   id: string

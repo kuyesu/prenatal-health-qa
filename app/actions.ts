@@ -3,12 +3,13 @@
 import db from "@/lib/db"
 import type { Question, Language } from "./types"
 
-// Function to save a question to the in-memory database
+// Function to save a question to the database
 export async function saveQuestion(
   question: string,
   language: Language,
   response: string,
   suggestedQuestions: string[],
+  userId?: string,
 ): Promise<Question> {
   try {
     // Parse response to get the answer and suggested questions if not already parsed
@@ -23,35 +24,56 @@ export async function saveQuestion(
       response = getSafetyDisclaimerResponse(language)
     }
 
-    // Create the question record in the database
-    const newQuestion = await db.question.create({
-      data: {
+    // For now, skip database storage for anonymous users to avoid schema issues
+    if (!userId) {
+      return {
+        id: Date.now().toString(),
         text: question,
         language: language,
         response: response,
+        suggestedQuestions: suggestedQuestions,
+        createdAt: new Date().toISOString(),
+      }
+    }
+
+    // Create or find a chat session for authenticated users
+    let chatSession = await db.chatSession.findFirst({
+      where: {
+        userId: userId,
+        isActive: true,
       },
     })
 
-    // Create the suggestions record with proper relation
-    await db.questionWithSuggestions.create({
-      data: {
-        question: {
-          connect: {
-            id: newQuestion.id,
-          },
+    if (!chatSession) {
+      chatSession = await db.chatSession.create({
+        data: {
+          userId: userId,
+          language: language,
+          title: question.slice(0, 50) + (question.length > 50 ? '...' : ''),
+          platform: "web",
         },
-        suggestions: suggestedQuestions,
+      })
+    }
+
+    // Create the chat message record in the database
+    const newMessage = await db.chatMessage.create({
+      data: {
+        chatSessionId: chatSession.id,
+        userMessage: question,
+        aiResponse: response,
+        language: language,
+        suggestedQuestions: suggestedQuestions,
       },
     })
 
     // Return the complete question object
     return {
-      id: newQuestion.id.toString(),
-      text: newQuestion.text,
-      language: newQuestion.language as Language,
-      response: newQuestion.response,
-      suggestedQuestions: suggestedQuestions,
-      createdAt: newQuestion.createdAt.toISOString(),
+      id: newMessage.id.toString(),
+      text: newMessage.userMessage,
+      language: newMessage.language as Language,
+      response: newMessage.aiResponse || "",
+      suggestedQuestions: newMessage.suggestedQuestions,
+      createdAt: newMessage.createdAt.toISOString(),
     }
   } catch (error) {
     console.error("Error saving question:", error)
@@ -70,20 +92,24 @@ export async function saveQuestion(
 
 // Function to parse the raw response to get answer and suggested questions
 function parseResponse(rawResponse: string): { answer: string; suggestedQuestions: string[] } {
-  const answerMatch = rawResponse.match(/ANSWER:(.*?)SUGGESTED_QUESTIONS:/s)
-  const suggestionsMatch = rawResponse.match(/SUGGESTED_QUESTIONS:(.*)/s)
+  // Replace newlines with a placeholder to handle multiline matching
+  const normalizedResponse = rawResponse.replace(/\n/g, '|||NEWLINE|||')
+  
+  const answerMatch = normalizedResponse.match(/ANSWER:(.*?)SUGGESTED_QUESTIONS:/)
+  const suggestionsMatch = normalizedResponse.match(/SUGGESTED_QUESTIONS:(.*)/)
 
   let answer = ""
   let suggestedQuestions: string[] = []
 
   if (answerMatch && answerMatch[1]) {
-    answer = answerMatch[1].trim()
+    answer = answerMatch[1].replace(/\|\|\|NEWLINE\|\|\|/g, '\n').trim()
   } else {
     answer = rawResponse.trim()
   }
 
   if (suggestionsMatch && suggestionsMatch[1]) {
-    suggestedQuestions = suggestionsMatch[1]
+    const suggestionsText = suggestionsMatch[1].replace(/\|\|\|NEWLINE\|\|\|/g, '\n')
+    suggestedQuestions = suggestionsText
       .split(/\d+\./)
       .filter((q) => q.trim() !== "")
       .map((q) => q.trim())
@@ -93,25 +119,25 @@ function parseResponse(rawResponse: string): { answer: string; suggestedQuestion
   return { answer, suggestedQuestions }
 }
 
-// Function to get all questions from the in-memory database
+// Function to get all questions from the database
 export async function getQuestions(): Promise<Question[]> {
   try {
-    const questions = await db.question.findMany({
+    const messages = await db.chatMessage.findMany({
       orderBy: {
         createdAt: "asc",
       },
       include: {
-        suggestedQuestions: true,
+        chatSession: true,
       },
     })
 
-    return questions.map((q) => ({
-      id: q.id.toString(),
-      text: q.text,
-      language: q.language as Language,
-      response: q.response,
-      suggestedQuestions: q.suggestedQuestions?.[0]?.suggestions || [],
-      createdAt: q.createdAt.toISOString(),
+    return messages.map((msg) => ({
+      id: msg.id.toString(),
+      text: msg.userMessage,
+      language: msg.language as Language,
+      response: msg.aiResponse || "",
+      suggestedQuestions: msg.suggestedQuestions,
+      createdAt: msg.createdAt.toISOString(),
     }))
   } catch (error) {
     console.error("Error fetching questions:", error)

@@ -32,26 +32,25 @@ export default function LanguageSelector({ language, setLanguage, languages }: L
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-[150px] p-1 rounded-xl border-primary/20 bg-background/80 backdrop-blur-md">
-        {(Object.entries(languages) as [Language, string][]).map(([key, value]) => (
-          <DropdownMenuItem
-            key={key}
-            onClick={() => setLanguage(key)}
-            className={`rounded-lg my-1 cursor-pointer transition-all duration-300 ${
-              language === key ? "bg-primary/10 text-primary font-medium" : "hover:bg-primary/5 hover:text-primary"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {language === key && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="w-1.5 h-1.5 rounded-full bg-primary"
-                />
-              )}
-              {value}
-            </div>
-          </DropdownMenuItem>
-        ))}
+                <option value="en">English</option>
+                <DropdownMenuItem
+                  key="en"
+                  onClick={() => setLanguage("en")}
+                  className={`rounded-lg my-1 cursor-pointer transition-all duration-300 ${
+                    language === "en" ? "bg-primary/10 text-primary font-medium" : "hover:bg-primary/5 hover:text-primary"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {language === "en" && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="w-1.5 h-1.5 rounded-full bg-primary"
+                      />
+                    )}
+                    English
+                  </div>
+                </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

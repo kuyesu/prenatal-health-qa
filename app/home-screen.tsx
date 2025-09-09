@@ -3,26 +3,24 @@
 import type React from 'react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Send, MessageSquare, User, AlertCircle, LightbulbIcon, X, Volume2 } from 'lucide-react'
+import { Send, MessageSquare, User, AlertCircle, LightbulbIcon, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 import type { Language, Question } from './types'
 import { getQuestions, saveQuestion } from './actions'
 import { useTheme } from 'next-themes'
-import { LANGUAGE_SPECIFIC_SUGGESTIONS, LANGUAGE_NAMES, TEST_MODE_RESPONSES } from './constants'
+import { LANGUAGE_SPECIFIC_SUGGESTIONS, LANGUAGE_NAMES } from './constants'
 import HealthHeader from './components/health-header'
-import HealthAIIcon from './components/health-ai-icon'
+import HealthAIIcon from './components/health-ai-icon' // kept for possible other uses (not used now)
 import { getFallbackResponse } from './utils/fallback-response'
 import MedicalDisclaimer from './components/medical-disclaimer'
 import VoiceControls from './components/voice-controls'
-import VoiceTooltip from './components/voice-tooltip'
-import VoiceChatDialog from './components/voice-chat-dialog'
-import SpeechDebug from './components/speech-debug'
+// Voice chat dialog, tooltip, and debug removed (keeping only microphone STT)
 import Image from 'next/image'
 
 export default function HomeScreen() {
-  const [language, setLanguage] = useState<Language>('en')
+  const [language, setLanguage] = useState<Language>('en') // Fixed to English only
   const [messages, setMessages] = useState<Question[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -33,7 +31,6 @@ export default function HomeScreen() {
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const [showSuggestions, setShowSuggestions] = useState(true)
   const { theme } = useTheme()
-  const [useTestMode, setUseTestMode] = useState(false)
   const [currentStreamingId, setCurrentStreamingId] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const [retryCount, setRetryCount] = useState(0)
@@ -45,16 +42,15 @@ export default function HomeScreen() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [showDisclaimer, setShowDisclaimer] = useState(true)
   const eventSourceRef = useRef<EventSource | null>(null)
-  const [textToSpeak, setTextToSpeak] = useState<{ text: string; id: number }>({ text: '', id: 0 })
 
   // Voice chat state
-  const [isVoiceChatOpen, setIsVoiceChatOpen] = useState(false)
+  // Removed voice chat modal state
   const [isListening, setIsListening] = useState(false)
-  const [isSpeaking, setIsSpeaking] = useState(false)
+  // Removed speaking state (TTS)
   const [transcript, setTranscript] = useState('')
   const [lastResponse, setLastResponse] = useState('')
 
-  // Update default suggestions when language changes
+  // Update default suggestions when language changes (still present for future flexibility)
   useEffect(() => {
     setDefaultSuggestions(LANGUAGE_SPECIFIC_SUGGESTIONS[language])
   }, [language])
@@ -69,392 +65,227 @@ export default function HomeScreen() {
     }
   }, [])
 
+  // Extra client-side English enforcement safeguard (lighter since API is clean)
+  const enforceEnglish = useCallback((text: string): string => {
+    if (!text) return ''
+    // Since API output is clean, just do minimal cleanup
+    return text
+      .replace(/\u00A0/g, ' ') // non-breaking spaces to normal
+      .replace(/[ ]{3,}/g, '  ') // collapse only excessive spaces (3+)
+      .replace(/\n{4,}/g, '\n\n\n') // limit very excessive blank lines
+      .trim()
+  }, [])
+
+  // Robust parser for ANSWER / SUGGESTED_QUESTIONS sections (tolerant to stream fragments)
+  const parseResponseClient = useCallback((raw: string) => {
+    if (!raw) return { answer: '', suggestions: [] as string[] }
+    const answerMatch = raw.match(/ANSWER:([\s\S]*?)(SUGGESTED_QUESTIONS:|$)/)
+    let answer = ''
+    if (answerMatch) answer = answerMatch[1].trim()
+    const suggestionsBlockMatch = raw.match(/SUGGESTED_QUESTIONS:([\s\S]*)/)
+    let suggestions: string[] = []
+    if (suggestionsBlockMatch) {
+      const block = suggestionsBlockMatch[1]
+      // Better parsing: split only on numbered list patterns, not on every newline
+      suggestions = block
+        .split(/(?:\n|^)\s*\d+\.\s*/m) // Split on "1. ", "2. " etc at start of line
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && !s.match(/^\d+$/)) // Remove empty and standalone numbers
+        .slice(0, 3)
+    }
+    return { answer, suggestions }
+  }, [])
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent | string) => {
       scrollToBottom()
-      if (typeof e !== 'string') {
-        e.preventDefault()
-      }
+      if (typeof e !== 'string') e.preventDefault()
       const questionText = typeof e === 'string' ? e : input
       if (!questionText.trim()) return
 
       // Cancel any ongoing request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-
-      // Close any existing EventSource
+      if (abortControllerRef.current) abortControllerRef.current.abort()
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
       }
 
+      setIsLoading(true)
+      setIsStreaming(true)
+      setShowSuggestions(false)
+      setStreamingResponse('')
+      setStreamingSuggestions([])
+      setInput('')
+      setRetryCount(0)
+      setIsSidebarOpen(false)
+
+      const tempId = Date.now().toString()
+      const userMessage: Question = {
+        id: tempId,
+        text: questionText,
+        language,
+        response: '',
+        suggestedQuestions: [],
+        createdAt: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, userMessage])
+      setCurrentStreamingId(tempId)
+      let fullResponse = ''
+
       try {
-        setIsLoading(true)
-        setIsStreaming(true)
-        setShowSuggestions(false)
-        setStreamingResponse('')
-        setStreamingSuggestions([])
-        setInput('')
-        setRetryCount(0)
-        setIsSidebarOpen(false)
+        const makeApiRequest = async (currentRetry = 0): Promise<void> => {
+          try {
+            abortControllerRef.current = new AbortController()
+            const signal = abortControllerRef.current.signal
+            const backoffDelay = currentRetry === 0 ? 0 : Math.min(1000 * 2 ** (currentRetry - 1), 10000)
+            if (backoffDelay) await new Promise((r) => setTimeout(r, backoffDelay))
 
-        // Add user message immediately
-        const tempId = Date.now().toString()
-        const userMessage: Question = {
-          id: tempId,
-          text: questionText,
-          language,
-          response: '',
-          suggestedQuestions: [],
-          createdAt: new Date().toISOString(),
-        }
+            const timeoutId = setTimeout(() => {
+              if (eventSourceRef.current) eventSourceRef.current.close()
+              if (abortControllerRef.current) abortControllerRef.current.abort()
+            }, 45000)
 
-        setMessages((prev) => [...prev, userMessage])
-        setCurrentStreamingId(tempId)
-
-        let fullResponse = ''
-
-        if (useTestMode) {
-          // Test mode - simulate streaming with a fallback response
-          console.log('Using test mode with fallback response')
-
-          // Get the appropriate language response
-          const fallbackResponse = TEST_MODE_RESPONSES[language] || TEST_MODE_RESPONSES.en
-
-          // Simulate streaming by adding characters one by one
-          const chars = fallbackResponse.split('')
-          for (let i = 0; i < chars.length; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            fullResponse += chars[i]
-
-            // Parse the response to extract answer and suggested questions
-            const answerMatch = fullResponse.match(/ANSWER:(.*?)SUGGESTED_QUESTIONS:/s)
-            const suggestionsMatch = fullResponse.match(/SUGGESTED_QUESTIONS:(.*)/s)
-
-            if (answerMatch && answerMatch[1]) {
-              setStreamingResponse(answerMatch[1].trim())
-            } else {
-              setStreamingResponse(fullResponse)
-            }
-
-            if (suggestionsMatch && suggestionsMatch[1]) {
-              const suggestions = suggestionsMatch[1]
-                .split(/\d+\./)
-                .filter((q) => q.trim() !== '')
-                .map((q) => q.trim())
-                .slice(0, 3)
-
-              setStreamingSuggestions(suggestions)
-            }
-
-            scrollToBottom()
-          }
-        } else {
-          // Real API mode
-          console.log('Fetching from API:', { question: questionText, language })
-
-          const makeApiRequest = async (currentRetry = 0) => {
+            const response = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question: questionText, language: 'en' }),
+              signal,
+            })
+            if (!response.ok) throw new Error(await response.text())
+            const reader = response.body?.getReader()
+            if (!reader) throw new Error('Failed to get response reader')
+            let receivedData = false
             try {
-              // Create a new AbortController for this request
-              abortControllerRef.current = new AbortController()
-              const signal = abortControllerRef.current.signal
-
-              // Calculate exponential backoff delay
-              const backoffDelay =
-                currentRetry === 0 ? 0 : Math.min(1000 * Math.pow(2, currentRetry - 1), 10000)
-              if (backoffDelay > 0) {
-                console.log(`Waiting ${backoffDelay}ms before retry ${currentRetry}...`)
-                await new Promise((resolve) => setTimeout(resolve, backoffDelay))
-              }
-
-              console.log(
-                `Attempt ${currentRetry + 1}/${maxRetries + 1}: Sending request to API...`
-              )
-
-              // Set up a timeout for the entire request
-              const timeoutId = setTimeout(() => {
-                console.log('Request timeout - aborting after 45 seconds')
-                if (eventSourceRef.current) {
-                  eventSourceRef.current.close()
-                  eventSourceRef.current = null
-                }
-                if (abortControllerRef.current) {
-                  abortControllerRef.current.abort()
-                }
-              }, 45000) // 45 second timeout
-
-              // First, make a POST request to initiate the streaming
-              const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  question: questionText,
-                  language,
-                }),
-                signal,
-              })
-
-              if (!response.ok) {
-                const errorText = await response.text()
-                console.error('API error response:', errorText)
-                throw new Error(`API responded with status ${response.status}: ${errorText}`)
-              }
-
-              // Set up a reader for the stream
-              const reader = response.body?.getReader()
-              if (!reader) {
-                throw new Error('Failed to get response reader')
-              }
-
-              // Process the stream
-              let receivedData = false
-
-              try {
-                while (true) {
-                  const { done, value } = await reader.read()
-
-                  if (done) {
-                    console.log('Stream complete')
-                    break
-                  }
-
-                  receivedData = true
-
-                  // Decode the chunk
-                  const text = new TextDecoder().decode(value)
-                  const lines = text.split('\n\n')
-
-                  for (const line of lines) {
-                    if (!line.trim() || !line.startsWith('data: ')) continue
-
-                    try {
-                      const jsonStr = line.substring(6) // Remove 'data: ' prefix
-                      const data = JSON.parse(jsonStr)
-
-                      if (data.error) {
-                        console.error('Error from stream:', data.message)
-                        throw new Error(data.message || 'Unknown stream error')
-                      }
-
-                      if (data.type === 'chunk' && data.content) {
-                        fullResponse += data.content
-
-                        // Parse the accumulated response
-                        const answerMatch = fullResponse.match(/ANSWER:(.*?)SUGGESTED_QUESTIONS:/s)
-                        const suggestionsMatch = fullResponse.match(/SUGGESTED_QUESTIONS:(.*)/s)
-
-                        if (answerMatch && answerMatch[1]) {
-                          const answerText = answerMatch[1].trim()
-                          setStreamingResponse(answerText)
-                          // Don't set text to speak during streaming to avoid interruptions
-                        } else {
-                          setStreamingResponse(fullResponse)
-                        }
-
-                        if (suggestionsMatch && suggestionsMatch[1]) {
-                          const suggestions = suggestionsMatch[1]
-                            .split(/\d+\./)
-                            .filter((q) => q.trim() !== '')
-                            .map((q) => q.trim())
-                            .slice(0, 3)
-
-                          setStreamingSuggestions(suggestions)
-                        }
-
-                        scrollToBottom()
-                      }
-
-                      if (data.type === 'done') {
-                        console.log('Stream marked as done')
-                        break
-                      }
-                    } catch (parseError) {
-                      console.error('Error parsing SSE data:', parseError, 'Line:', line)
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                receivedData = true
+                const textChunk = new TextDecoder().decode(value)
+                const lines = textChunk.split('\n\n')
+                for (const line of lines) {
+                  if (!line.trim() || !line.startsWith('data: ')) continue
+                  try {
+                    const data = JSON.parse(line.substring(6))
+                    if (data.type === 'chunk' && data.content) {
+                      fullResponse += data.content
+                      const { answer, suggestions } = parseResponseClient(fullResponse)
+                      setStreamingResponse(enforceEnglish(answer || fullResponse))
+                      if (suggestions.length) setStreamingSuggestions(suggestions.map(enforceEnglish))
+                      scrollToBottom()
                     }
-                  }
-                }
-              } catch (streamError) {
-                console.error('Error processing stream:', streamError)
-                throw streamError
-              } finally {
-                clearTimeout(timeoutId)
-              }
-
-              if (!receivedData) {
-                throw new Error('No data received from the API')
-              }
-            } catch (apiError) {
-              console.error('API fetch error:', apiError)
-
-              // Check if this was an abort error (user cancelled or timeout)
-              if (apiError.name === 'AbortError') {
-                console.log('Request was aborted')
-
-                // If it was a timeout (not user-initiated), retry
-                if (currentRetry < maxRetries) {
-                  console.log(
-                    `Retrying request after timeout (${currentRetry + 1}/${maxRetries})...`
-                  )
-                  setRetryCount(currentRetry + 1)
-                  return makeApiRequest(currentRetry + 1)
-                } else {
-                  console.log('Max retries reached after timeouts')
-                  throw new Error('Request timed out repeatedly. Please try again later.')
+                  } catch {}
                 }
               }
-
-              // Network errors should be retried
-              if (
-                apiError.message.includes('Failed to fetch') ||
-                apiError.message.includes('NetworkError') ||
-                apiError.message.includes('network') ||
-                apiError.message.includes('ECONNREFUSED') ||
-                apiError.message.includes('ETIMEDOUT')
-              ) {
-                if (currentRetry < maxRetries) {
-                  console.log(
-                    `Retrying request after network error (${currentRetry + 1}/${maxRetries})...`
-                  )
-                  setRetryCount(currentRetry + 1)
-                  return makeApiRequest(currentRetry + 1)
-                }
-              }
-
-              // If we haven't exceeded max retries, try again for any error
-              if (currentRetry < maxRetries) {
-                console.log(`Retrying request (${currentRetry + 1}/${maxRetries})...`)
-                setRetryCount(currentRetry + 1)
-                return makeApiRequest(currentRetry + 1)
-              }
-
-              // If we've reached max retries, use fallback
-              console.log('All retries failed. Using fallback response.')
-              fullResponse = getFallbackResponse(language, questionText)
-              setStreamingResponse(
-                fullResponse.match(/ANSWER:(.*?)SUGGESTED_QUESTIONS:/s)?.[1].trim() || ''
-              )
-              setStreamingSuggestions(
-                fullResponse
-                  .match(/SUGGESTED_QUESTIONS:(.*)/s)?.[1]
-                  .split(/\d+\./)
-                  .filter((q) => q.trim() !== '')
-                  .map((q) => q.trim())
-                  .slice(0, 3) || []
-              )
+            } finally {
+              clearTimeout(timeoutId)
             }
+            if (!receivedData) throw new Error('No data received from API')
+          } catch (apiError: any) {
+            if (apiError?.name === 'AbortError' && currentRetry < maxRetries) {
+              setRetryCount(currentRetry + 1)
+              return makeApiRequest(currentRetry + 1)
+            }
+            if (currentRetry < maxRetries) {
+              setRetryCount(currentRetry + 1)
+              return makeApiRequest(currentRetry + 1)
+            }
+            // Only use fallback if all retries exhausted
+            fullResponse = getFallbackResponse('en', questionText)
+            const { answer, suggestions } = parseResponseClient(fullResponse)
+            setStreamingResponse(enforceEnglish(answer || fullResponse))
+            if (suggestions.length) setStreamingSuggestions(suggestions.map(enforceEnglish))
           }
-
-          await makeApiRequest()
         }
+        await makeApiRequest()
 
-        // Parse the final response
-        const answerMatch = fullResponse.match(/ANSWER:(.*?)SUGGESTED_QUESTIONS:/s)
-        const suggestionsMatch = fullResponse.match(/SUGGESTED_QUESTIONS:(.*)/s)
-
-        let answer = ''
-        let suggestedQuestions: string[] = []
-
-        if (answerMatch && answerMatch[1]) {
-          answer = answerMatch[1].trim()
-        } else {
-          answer = fullResponse.trim()
-        }
-
-        if (suggestionsMatch && suggestionsMatch[1]) {
-          suggestedQuestions = suggestionsMatch[1]
-            .split(/\d+\./)
-            .filter((q) => q.trim() !== '')
-            .map((q) => q.trim())
-            .slice(0, 3)
-        }
-
-        try {
-          // Save the question and response to the database
-          const savedQuestion = await saveQuestion(
-            questionText,
-            language,
-            answer,
-            suggestedQuestions
-          )
-
-          // Update the messages with the saved question
-          setMessages((prev) => prev.map((msg) => (msg.id === tempId ? savedQuestion : msg)))
-
-          // Set the text to speak after completion
-          setTextToSpeak({ text: answer, id: Date.now() })
-
-          // Store the last response for voice chat
-          setLastResponse(answer)
-        } catch (dbError) {
-          console.error('Error saving to database:', dbError)
-          // If database save fails, still update the UI with the response
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === tempId
-                ? {
-                    ...msg,
-                    response: answer,
-                    suggestedQuestions: suggestedQuestions,
-                  }
-                : msg
-            )
-          )
-
-          // Set the text to speak after completion
-          setTextToSpeak({ text: answer, id: Date.now() })
-
-          // Store the last response for voice chat
-          setLastResponse(answer)
-        }
-
+        // Final parse & commit to message list
+        const { answer: finalParsedAnswer, suggestions: finalParsedSuggestions } = parseResponseClient(fullResponse)
+        const finalAnswer = enforceEnglish(finalParsedAnswer || fullResponse)
+        const finalSuggestions = finalParsedSuggestions.map(enforceEnglish)
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, response: finalAnswer, suggestedQuestions: finalSuggestions } : m)))
+        setLastResponse(finalAnswer)
         setCurrentStreamingId(null)
         setTimeout(scrollToBottom, 100)
       } catch (error) {
-        toast({
-          title: 'Error',
-          description: 'Failed to submit question. Please try again.',
-          variant: 'destructive',
-        })
-        console.error('Error submitting question:', error)
+        toast({ title: 'Error', description: 'Failed to submit question. Please try again.', variant: 'destructive' })
         setCurrentStreamingId(null)
       } finally {
         setIsLoading(false)
         setIsStreaming(false)
         abortControllerRef.current = null
-
-        // Focus the input field after submission
-        setTimeout(() => {
-          inputRef.current?.focus()
-        }, 100)
+        setTimeout(() => inputRef.current?.focus(), 100)
       }
     },
-    [input, language, toast, scrollToBottom, useTestMode, maxRetries]
+    [input, language, scrollToBottom, maxRetries, toast, parseResponseClient, enforceEnglish]
   )
+  // end handleSubmit
+
+  // Enhanced formatter: detects bullet lists, splits long blocks into sentence groups for readability
+  const renderFormatted = useCallback((text: string) => {
+    if (!text) return null
+    const cleaned = text.trim()
+    if (!cleaned) return null
+
+    // First split on double newlines to respect intentional paragraph breaks
+    const rawParas = cleaned.split(/\n{2,}/)
+    const nodes: React.ReactNode[] = []
+
+    const sentenceChunk = (para: string) => {
+      // If single very long paragraph, split into sentence groups of up to ~2 sentences
+      const sentences = para
+        .replace(/\n/g, ' ')
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (sentences.length <= 2) return [para]
+      const groups: string[] = []
+      for (let i = 0; i < sentences.length; i += 2) {
+        groups.push(sentences.slice(i, i + 2).join(' '))
+      }
+      return groups
+    }
+
+    rawParas.forEach((para, pIdx) => {
+      // Detect pure bullet list
+      const lines = para.split(/\n/)
+      const bulletPattern = /^\s*([*-]|\d+\.)\s+/
+      const isBulletBlock = lines.every((l) => bulletPattern.test(l)) && lines.length > 1
+      if (isBulletBlock) {
+        nodes.push(
+          <ul key={`list-${pIdx}`} className="list-disc ml-5 space-y-1 mb-4">
+            {lines.map((l, i) => (
+              <li key={i}>{l.replace(bulletPattern, '')}</li>
+            ))}
+          </ul>
+        )
+        return
+      }
+
+      // Mixed content: try to identify inline bullets like "1. Item" inside
+      if (/SUGGESTED_QUESTIONS:/i.test(para)) {
+        // Skip raw marker if present; suggestions handled separately
+        return
+      }
+
+      const groups = sentenceChunk(para)
+      groups.forEach((g, gi) =>
+        nodes.push(
+          <p key={`p-${pIdx}-${gi}`} className="mb-3 last:mb-0 leading-relaxed text-foreground">
+            {g}
+          </p>
+        )
+      )
+    })
+
+    return nodes
+  }, [])
+
 
   useEffect(() => {
-    const fetchQuestions = async () => {
-      try {
-        const questions = await getQuestions()
-        setMessages(questions)
-
-        // Set the last response for voice chat if there are messages
-        if (questions.length > 0) {
-          setLastResponse(questions[questions.length - 1].response)
-        }
-
-        setTimeout(scrollToBottom, 100)
-      } catch (error) {
-        toast({
-          title: 'Error',
-          description: 'Failed to load chat history. Please try refreshing the page.',
-          variant: 'destructive',
-        })
-      }
-    }
-    fetchQuestions()
+  // Anonymous mode: skip server fetch to ensure no cross-user data exposure
+  setMessages([])
+  setLastResponse('')
+  setTimeout(scrollToBottom, 100)
 
     // Clean up any pending requests when component unmounts
     return () => {
@@ -471,9 +302,7 @@ export default function HomeScreen() {
     setIsSidebarOpen((prev) => !prev)
   }, [])
 
-  const toggleVoiceChat = useCallback(() => {
-    setIsVoiceChatOpen((prev) => !prev)
-  }, [])
+  // Removed toggleVoiceChat (voice chat disabled)
 
   return (
     <div className="flex flex-col h-screen bg-health-bg dark:bg-health-bg-dark">
@@ -540,22 +369,6 @@ export default function HomeScreen() {
                 )}
               </div>
             </div>
-
-            {/* Test Mode Toggle */}
-            <div className="mt-4 pt-4 border-t border-border">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="test-mode"
-                  checked={useTestMode}
-                  onChange={(e) => setUseTestMode(e.target.checked)}
-                  className="rounded text-primary focus:ring-primary"
-                />
-                <label htmlFor="test-mode" className="text-sm text-muted-foreground">
-                  Test Mode (No API)
-                </label>
-              </div>
-            </div>
           </div>
         </motion.div>
 
@@ -568,122 +381,55 @@ export default function HomeScreen() {
             >
               <div className="max-w-3xl mx-auto space-y-6 py-6">
                 <AnimatePresence>
-                  {messages.map((message, index) => {
-                    // Calculate opacity based on position (older messages fade out)
-                    const totalMessages = messages.length
-                    const position = index + 1
-                    // More aggressive fading - older messages fade out more quickly
-                    const fadeStart = totalMessages - 3 // Start fading after the 3 most recent messages
-                    const opacity =
-                      position < fadeStart
-                        ? Math.max(0.3, 1 - (totalMessages - position) * 0.15) // Faster fade rate
-                        : 1
-
-                    return (
-                      <motion.div
-                        key={message.id}
-                        data-message-id={message.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{
-                          opacity: opacity,
-                          y: 0,
-                          filter:
-                            position < fadeStart
-                              ? `blur(${(totalMessages - position) * 0.5}px)`
-                              : 'blur(0px)',
-                        }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-6"
-                      >
+                  {messages.map((message) => (
+                    <motion.div
+                      key={message.id}
+                      data-message-id={message.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.25 }}
+                      className="space-y-4"
+                    >
                         {/* User Message */}
-                        <motion.div
-                          className="flex items-start gap-3 justify-end w-full"
-                          whileHover={{ scale: 1.01 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <div className="flex-1 overflow-hidden">
-                            <div className="user-message ml-auto max-w-[85%]">
-                              <p className="break-words text-foreground">{message.text}</p>
-                            </div>
-                            <div className="flex items-center gap-2 mt-2 justify-end">
-                              <span className="text-xs text-muted-foreground">You</span>
-                              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                                <User className="w-3.5 h-3.5 text-primary" />
+                        <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2 }}>
+                          <div className="w-full bg-muted/40 dark:bg-slate-800/40 border border-border rounded-xl p-4 shadow-sm">
+                            <div className="flex items-center mb-2 gap-2">
+                              <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                                <User className="w-3.5 h-3.5 text-foreground" />
                               </div>
+                              <span className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">You</span>
                             </div>
+                            <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words">{message.text}</div>
                           </div>
                         </motion.div>
 
                         {/* AI Assistant Message */}
                         {message.id !== currentStreamingId && (
-                          <motion.div
-                            className="flex items-start gap-3 w-full"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: opacity, y: 0 }}
-                            transition={{ duration: 0.3, delay: 0.2 }}
-                          >
-                            <HealthAIIcon className="mt-1" />
-                            <div className="flex-1 overflow-hidden">
-                              <div className="ai-message max-w-[85%]">
-                                <p className="break-words text-foreground whitespace-pre-wrap">
-                                  {message.response}
-                                </p>
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
+                            <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed">
+                              <div className="flex items-center mb-3 gap-2">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                                  <Image src="/logo.png" alt="Assistant" width={28} height={28} className="object-contain" />
+                                </div>
+                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prenatal Health Assistant</span>
                               </div>
-                              <div className="flex items-center gap-2 mt-2">
-                                <span className="text-xs text-muted-foreground">
-                                  Prenatal Health Assistant
-                                </span>
-
-                                {/* Listen button for each message */}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-xs flex items-center gap-1"
-                                  onClick={() =>
-                                    setTextToSpeak({ text: message.response, id: Date.now() })
-                                  }
-                                >
-                                  <Volume2 className="h-3 w-3" />
-                                  Listen
-                                </Button>
+                              <div className="text-sm text-foreground space-y-1">
+                                {renderFormatted(message.response)}
                               </div>
-
                               {message.suggestedQuestions?.length > 0 && (
-                                <motion.div
-                                  className="mt-4 flex flex-wrap gap-2"
-                                  initial={{ opacity: 0, y: 10 }}
-                                  animate={{ opacity: opacity, y: 0 }}
-                                  transition={{ duration: 0.3, delay: 0.4 }}
-                                >
-                                  <div className="mt-2 w-full">
-                                    <h3 className="text-sm font-medium text-primary flex items-center">
-                                      <LightbulbIcon className="w-4 h-4 mr-2" />
-                                      Suggested Questions
-                                    </h3>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2 max-w-full">
-                                    {message.suggestedQuestions.map((question, idx) => (
-                                      <motion.div
-                                        key={idx}
-                                        whileHover={{ scale: 1.03 }}
-                                        whileTap={{ scale: 0.97 }}
-                                      >
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            scrollToBottom()
-                                            handleSubmit(question)
-                                          }}
-                                          className="text-wrap h-auto text-left p-2 rounded-xl border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary"
-                                        >
-                                          {question}
-                                        </Button>
-                                      </motion.div>
+                                <div className="mt-5 pt-4 border-t border-border/60">
+                                  <h3 className="text-xs font-semibold text-primary flex items-center gap-1 mb-2 tracking-wide uppercase">
+                                    <LightbulbIcon className="w-3.5 h-3.5" /> Suggested Questions
+                                  </h3>
+                                  <div className="flex flex-wrap gap-2">
+                                    {message.suggestedQuestions.map((q, idx) => (
+                                      <Button key={idx} variant="outline" size="sm" className="text-xs h-auto py-1 px-2 rounded-lg border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary" onClick={() => handleSubmit(q)}>
+                                        {q}
+                                      </Button>
                                     ))}
                                   </div>
-                                </motion.div>
+                                </div>
                               )}
                             </div>
                           </motion.div>
@@ -691,15 +437,15 @@ export default function HomeScreen() {
 
                         {/* Streaming Response (if this is the current streaming message) */}
                         {message.id === currentStreamingId && (
-                          <motion.div
-                            className="flex items-start gap-3 w-full"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.3 }}
-                          >
-                            <HealthAIIcon isResponding={true} className="mt-1" />
-                            <div className="flex-1 overflow-hidden">
-                              <div className="ai-message max-w-[85%]">
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                            <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed">
+                              <div className="flex items-center mb-3 gap-2">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                                  <Image src="/logo.png" alt="Assistant" width={28} height={28} className="object-contain animate-pulse" />
+                                </div>
+                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prenatal Health Assistant</span>
+                              </div>
+                              <div>
                                 {retryCount > 0 && (
                                   <div className="mb-2 text-accent flex items-center gap-1 text-sm">
                                     <AlertCircle className="w-4 h-4" />
@@ -709,18 +455,16 @@ export default function HomeScreen() {
                                   </div>
                                 )}
                                 {streamingResponse ? (
-                                  <p className="break-words text-foreground whitespace-pre-wrap">
-                                    {streamingResponse}
+                                  <div className="break-words text-foreground whitespace-pre-wrap leading-relaxed space-y-1">
+                                    {renderFormatted(streamingResponse)}
                                     <motion.span
+                                      className="inline-block"
                                       animate={{ opacity: [0, 1, 0] }}
-                                      transition={{
-                                        repeat: Number.POSITIVE_INFINITY,
-                                        duration: 1.5,
-                                      }}
+                                      transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5 }}
                                     >
                                       ▌
                                     </motion.span>
-                                  </p>
+                                  </div>
                                 ) : (
                                   <div className="flex gap-1 py-2">
                                     <motion.div
@@ -753,16 +497,11 @@ export default function HomeScreen() {
                                   </div>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2 mt-2">
-                                <span className="text-xs text-muted-foreground">
-                                  Prenatal Health Assistant
-                                </span>
-                              </div>
 
                               {/* Streaming Suggestions */}
-                              {streamingSuggestions.length > 0 && (
+                {streamingSuggestions.length > 0 && (
                                 <motion.div
-                                  className="mt-4 flex flex-wrap gap-2"
+                  className="mt-5 pt-4 border-t border-border/60 flex flex-wrap gap-2"
                                   initial={{ opacity: 0, y: 10 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   transition={{ duration: 0.3 }}
@@ -803,8 +542,7 @@ export default function HomeScreen() {
                           </motion.div>
                         )}
                       </motion.div>
-                    )
-                  })}
+                    ))}
                 </AnimatePresence>
 
                 {/* Welcome Message and Default Suggestions */}
@@ -861,22 +599,7 @@ export default function HomeScreen() {
               </div>
             </div>
 
-            {/* Voice Chat Dialog */}
-            <VoiceChatDialog
-              isOpen={isVoiceChatOpen}
-              onClose={() => setIsVoiceChatOpen(false)}
-              onSpeechInput={handleSubmit}
-              language={language}
-              isSpeaking={isSpeaking}
-              isListening={isListening}
-              transcript={transcript}
-              startListening={() => setIsListening(true)}
-              stopListening={() => setIsListening(false)}
-              lastResponse={lastResponse}
-            />
-
-            {/* Fixed Input Container */}
-            <VoiceTooltip />
+            {/* Voice chat dialog & tooltip removed */}
             <div className="absolute bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md border-t border-border">
               <div className="p-4 max-w-3xl mx-auto">
                 <div className="flex flex-col gap-2">
@@ -887,12 +610,8 @@ export default function HomeScreen() {
                           setInput(text)
                           handleSubmit(text)
                         }}
-                        textToSpeak={textToSpeak.text}
                         language={language}
-                        key={`voice-controls-${textToSpeak.id}`}
-                        onVoiceChatToggle={toggleVoiceChat}
                         isListeningState={[isListening, setIsListening]}
-                        isSpeakingState={[isSpeaking, setIsSpeaking]}
                         transcriptState={[transcript, setTranscript]}
                       />
 
@@ -933,7 +652,7 @@ export default function HomeScreen() {
           </main>
         </div>
       </div>
-      <SpeechDebug />
+  {/* SpeechDebug removed */}
     </div>
   )
 }

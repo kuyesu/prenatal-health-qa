@@ -1,0 +1,201 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id                    String    @id @default(auto()) @map("_id") @db.ObjectId
+  email                 String    @unique
+  password              String
+  name                  String
+  profileCompleted      Boolean   @default(false)
+  pregnancyWeek         Int?
+  dueDate               String?
+  previousPregnancies   Int?
+  healthConditions      String[]
+  concerns              String[]
+  preferredLanguage     String    @default("en")
+  isEmailVerified       Boolean   @default(false)
+  emailVerificationToken String?
+  passwordResetToken    String?
+  passwordResetExpires  DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  chatSessions          ChatSession[]
+  refreshTokens         RefreshToken[]
+  onboardingData        OnboardingData?
+
+  @@map("users")
+}
+
+// Onboarding data model
+model OnboardingData {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String   @unique @db.ObjectId
+  name                  String
+  age                   Int
+  pregnancyWeek         Int
+  dueDate               String
+  previousPregnancies   Int
+  healthConditions      String[]
+  concerns              String[]
+  preferredLanguage     String
+  completedAt           DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("onboarding_data")
+}
+
+// Chat session model
+model ChatSession {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String           @db.ObjectId
+  title             String?
+  language          String           @default("en")
+  platform          String           @default("web") // "web" or "mobile"
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relations
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages          ChatMessage[]
+
+  @@map("chat_sessions")
+}
+
+// Individual chat messages
+model ChatMessage {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  chatSessionId     String           @db.ObjectId
+  userMessage       String
+  aiResponse        String?
+  language          String
+  suggestedQuestions String[]
+  metadata          Json?            // For storing additional context like pregnancy week, etc.
+  responseTime      Int?             // Response time in milliseconds
+  feedback          String?          // User feedback: "helpful", "not_helpful", etc.
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relations
+  chatSession       ChatSession      @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+// Refresh tokens for JWT management
+model RefreshToken {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String           @db.ObjectId
+  token             String           @unique
+  expiresAt         DateTime
+  isRevoked         Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relations
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// Health tips and information
+model HealthTip {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  title             String
+  content           String
+  language          String
+  category          String           // "nutrition", "exercise", "symptoms", etc.
+  pregnancyWeekMin  Int?             // Minimum pregnancy week this tip applies to
+  pregnancyWeekMax  Int?             // Maximum pregnancy week this tip applies to
+  tags              String[]
+  isActive          Boolean          @default(true)
+  priority          Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("health_tips")
+}
+
+// FAQ model for common questions
+model FAQ {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  question          String
+  answer            String
+  language          String
+  category          String
+  tags              String[]
+  pregnancyWeekMin  Int?
+  pregnancyWeekMax  Int?
+  isActive          Boolean          @default(true)
+  popularity        Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("faqs")
+}
+
+// Analytics for tracking app usage
+model Analytics {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String?          @db.ObjectId
+  eventType         String           // "login", "question_asked", "tip_viewed", etc.
+  eventData         Json?
+  platform          String           // "web" or "mobile"
+  language          String?
+  pregnancyWeek     Int?
+  sessionId         String?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime         @default(now())
+
+  @@map("analytics")
+}
+
+// App feedback model
+model Feedback {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String?          @db.ObjectId
+  type              String           // "bug", "feature_request", "general", etc.
+  title             String
+  description       String
+  rating            Int?             // 1-5 rating
+  platform          String
+  appVersion        String?
+  deviceInfo        Json?
+  status            String           @default("open") // "open", "in_progress", "resolved", "closed"
+  adminResponse     String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("feedback")
+}
+
+// System settings
+model SystemSetting {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  key               String           @unique
+  value             String
+  description       String?
+  type              String           @default("string") // "string", "number", "boolean", "json"
+  isPublic          Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("system_settings")
+}
