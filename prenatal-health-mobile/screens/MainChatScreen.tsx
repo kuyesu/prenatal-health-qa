@@ -10,12 +10,13 @@ import {
   Image,
   ActivityIndicator,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
-import { KeyboardAwareContainer } from '../components/KeyboardAwareContainer';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { apiService } from '../utils/apiService';
@@ -40,6 +41,20 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
 
   useEffect(() => {
     loadChatHistory();
+    
+    // Keyboard listeners for better scrolling behavior
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      scrollToBottomWithKeyboard();
+    });
+    
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      scrollToBottom();
+    });
+
+    return () => {
+      keyboardDidShowListener?.remove();
+      keyboardDidHideListener?.remove();
+    };
   }, []);
 
   const loadChatHistory = async () => {
@@ -56,6 +71,13 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
+  };
+
+  // Enhanced scroll to bottom that handles keyboard
+  const scrollToBottomWithKeyboard = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 300); // Longer delay for keyboard animation
   };
 
   const getMockResponse = (question: string, language: Language) => {
@@ -122,18 +144,21 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
 
     // Add user message immediately
     setMessages(prev => [...prev, userMessage]);
-    scrollToBottom();
+    scrollToBottomWithKeyboard();
 
     try {
       // Try API call first
-  const response = await apiService.sendMessage(messageText);
+      const response = await apiService.sendMessage(messageText);
 
-      const apiResponse = response.data?.message || response.data?.response || "I'm sorry, I couldn't process your question. Please try again.";
-      const suggestions = LANGUAGE_SPECIFIC_SUGGESTIONS[language].slice(0, 3);
+      const apiResponseData = response.data?.response || response.data?.data?.response || response.data?.message || "I'm sorry, I couldn't process your question. Please try again.";
+      const apiSuggestions = response.data?.suggestedQuestions || response.data?.data?.suggestedQuestions || [];
+      
+      // Fallback suggestions if none provided by API
+      const suggestions = apiSuggestions.length > 0 ? apiSuggestions.slice(0, 3) : LANGUAGE_SPECIFIC_SUGGESTIONS[language].slice(0, 3);
 
       const completedMessage: Question = {
         ...userMessage,
-        response: apiResponse,
+        response: apiResponseData,
         suggestedQuestions: suggestions,
       };
 
@@ -143,7 +168,7 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
 
       // Save to storage
       await storage.addChatMessage(completedMessage);
-      scrollToBottom();
+      scrollToBottomWithKeyboard();
 
     } catch (error) {
       console.error('API call failed, using fallback response:', error);
@@ -166,7 +191,7 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
 
       // Save to storage
       await storage.addChatMessage(completedMessage);
-      scrollToBottom();
+      scrollToBottomWithKeyboard();
     } finally {
       setIsLoading(false);
     }
@@ -257,9 +282,10 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAwareContainer 
-        containerStyle={styles.container}
-        scrollEnabled={false}
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
 
       {/* Messages */}
@@ -268,6 +294,11 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
         style={styles.messagesContainer}
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+          autoscrollToTopThreshold: 10,
+        }}
       >
         {showSuggestions && messages.length === 0 && (
           <View style={styles.welcomeContainer}>
@@ -321,7 +352,7 @@ export const MainChatScreen: React.FC<MainChatScreenProps> = ({ onLogout }) => {
           </View>
         </TouchableWithoutFeedback>
       </View>
-    </KeyboardAwareContainer>
+    </KeyboardAvoidingView>
     </View>
   );
 };
@@ -365,6 +396,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 16,
+    paddingBottom: 100, // Extra space at bottom to ensure last message is visible
   },
   welcomeContainer: {
     alignItems: 'center',
@@ -492,14 +524,17 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 16,
-    paddingBottom: 8,
+    paddingBottom: 16,
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
     alignItems: 'flex-end',
+    minHeight: 60,
   },
   inputWrapper: {
     backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
   inputField: {
     flex: 1,

@@ -65,6 +65,16 @@ export default function HomeScreen() {
     }
   }, [])
 
+  // Enhanced scroll function for when streaming
+  const scrollToBottomForced = useCallback(() => {
+    if (chatContainerRef.current) {
+      const element = chatContainerRef.current
+      setTimeout(() => {
+        element.scrollTop = element.scrollHeight
+      }, 50)
+    }
+  }, [])
+
   // Extra client-side English enforcement safeguard (lighter since API is clean)
   const enforceEnglish = useCallback((text: string): string => {
     if (!text) return ''
@@ -98,10 +108,12 @@ export default function HomeScreen() {
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent | string) => {
-      scrollToBottom()
       if (typeof e !== 'string') e.preventDefault()
       const questionText = typeof e === 'string' ? e : input
       if (!questionText.trim()) return
+
+      // Scroll to bottom immediately when user sends message
+      scrollToBottomForced()
 
       // Cancel any ongoing request
       if (abortControllerRef.current) abortControllerRef.current.abort()
@@ -131,6 +143,9 @@ export default function HomeScreen() {
       setMessages((prev) => [...prev, userMessage])
       setCurrentStreamingId(tempId)
       let fullResponse = ''
+
+      // Scroll again after message is added
+      setTimeout(scrollToBottomForced, 100)
 
       try {
         const makeApiRequest = async (currentRetry = 0): Promise<void> => {
@@ -170,8 +185,10 @@ export default function HomeScreen() {
                       fullResponse += data.content
                       const { answer, suggestions } = parseResponseClient(fullResponse)
                       setStreamingResponse(enforceEnglish(answer || fullResponse))
-                      if (suggestions.length) setStreamingSuggestions(suggestions.map(enforceEnglish))
-                      scrollToBottom()
+                      if (suggestions.length) {
+                        setStreamingSuggestions(suggestions.map(enforceEnglish))
+                      }
+                      scrollToBottomForced()
                     }
                   } catch {}
                 }
@@ -193,7 +210,13 @@ export default function HomeScreen() {
             fullResponse = getFallbackResponse('en', questionText)
             const { answer, suggestions } = parseResponseClient(fullResponse)
             setStreamingResponse(enforceEnglish(answer || fullResponse))
-            if (suggestions.length) setStreamingSuggestions(suggestions.map(enforceEnglish))
+            // Ensure fallback also has suggestions
+            const fallbackSuggestions = suggestions.length > 0 ? suggestions : [
+              'What is prenatal care?',
+              'What vitamins should I take during pregnancy?',
+              'How often should I visit my doctor during pregnancy?'
+            ]
+            setStreamingSuggestions(fallbackSuggestions.map(enforceEnglish))
           }
         }
         await makeApiRequest()
@@ -202,10 +225,19 @@ export default function HomeScreen() {
         const { answer: finalParsedAnswer, suggestions: finalParsedSuggestions } = parseResponseClient(fullResponse)
         const finalAnswer = enforceEnglish(finalParsedAnswer || fullResponse)
         const finalSuggestions = finalParsedSuggestions.map(enforceEnglish)
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, response: finalAnswer, suggestedQuestions: finalSuggestions } : m)))
+        
+        // Ensure we always have some suggestions, fallback to default if none parsed
+        const ensuredSuggestions = finalSuggestions.length > 0 ? finalSuggestions : [
+          'What vitamins should I take during pregnancy?',
+          'How often should I have prenatal check-ups?', 
+          'What foods should I avoid during pregnancy?'
+        ]
+        
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, response: finalAnswer, suggestedQuestions: ensuredSuggestions } : m)))
         setLastResponse(finalAnswer)
         setCurrentStreamingId(null)
-        setTimeout(scrollToBottom, 100)
+        setTimeout(scrollToBottomForced, 100)
+        setTimeout(scrollToBottom, 300) // Additional smooth scroll after content settles
       } catch (error) {
         toast({ title: 'Error', description: 'Failed to submit question. Please try again.', variant: 'destructive' })
         setCurrentStreamingId(null)
@@ -216,7 +248,7 @@ export default function HomeScreen() {
         setTimeout(() => inputRef.current?.focus(), 100)
       }
     },
-    [input, language, scrollToBottom, maxRetries, toast, parseResponseClient, enforceEnglish]
+    [input, language, scrollToBottom, scrollToBottomForced, maxRetries, toast, parseResponseClient, enforceEnglish]
   )
   // end handleSubmit
 
@@ -407,7 +439,7 @@ export default function HomeScreen() {
                         {/* AI Assistant Message */}
                         {message.id !== currentStreamingId && (
                           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-                            <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed">
+                            <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed mb-5">
                               <div className="flex items-center mb-3 gap-2">
                                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                                   <Image src="/logo.png" alt="Assistant" width={28} height={28} className="object-contain" />

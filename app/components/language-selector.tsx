@@ -19,14 +19,13 @@ export default function LanguageSelector({ language, setLanguage }: LanguageSele
           variant="outline"
           className="flex items-center gap-2 rounded-full border-primary/20 hover:bg-primary/10 hover:text-primary transition-all duration-300"
         >
-          <Globe className="h-4 w-4 text-primary" />
           <span className="font-medium">English</span>
           <motion.div
             animate={{ rotate: [0, 180, 360] }}
             transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
             className="text-primary/50"
           >
-            <ChevronDown className="h-4 w-4" />
+            <Globe className="h-4 w-4 text-primary" />
           </motion.div>
         </Button>
       </DropdownMenuTrigger>

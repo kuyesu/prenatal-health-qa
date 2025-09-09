@@ -7,6 +7,7 @@ import {
   ViewStyle,
   ScrollViewProps,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface KeyboardAwareContainerProps extends ScrollViewProps {
   children: React.ReactNode;
@@ -22,7 +23,8 @@ export const KeyboardAwareContainer: React.FC<KeyboardAwareContainerProps> = ({
   enableOnAndroid = true,
   ...scrollViewProps
 }) => {
-  const keyboardVerticalOffset = Platform.OS === 'ios' ? 0 : 20;
+  const insets = useSafeAreaInsets();
+  const keyboardVerticalOffset = Platform.OS === 'ios' ? insets.bottom : 0;
   
   return (
     <SafeAreaView style={[{ flex: 1 }, containerStyle]}>
