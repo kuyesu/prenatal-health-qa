@@ -24,6 +24,64 @@ function sanitizeEnglish(text: string): string {
     .replace(/[ ]{3,}/g, '  ') // only collapse excessive spaces (3+)
 }
 
+// Generate contextual suggested questions based on the user's input
+function generateContextualSuggestions(userQuestion: string): string[] {
+  const question = userQuestion.toLowerCase()
+  
+  // Categorize questions and provide relevant suggestions
+  if (question.includes('diet') || question.includes('food') || question.includes('eat') || question.includes('nutrition')) {
+    return [
+      'What foods should I avoid during pregnancy?',
+      'How much water should I drink while pregnant?',
+      'What vitamins should I take during pregnancy?',
+      'Is it safe to eat fish during pregnancy?'
+    ]
+  } else if (question.includes('exercise') || question.includes('workout') || question.includes('activity') || question.includes('movement')) {
+    return [
+      'What exercises are safe during pregnancy?',
+      'Can I continue my regular workout routine?',
+      'How much exercise should I get while pregnant?',
+      'What activities should I avoid during pregnancy?'
+    ]
+  } else if (question.includes('symptom') || question.includes('pain') || question.includes('discomfort') || question.includes('feel')) {
+    return [
+      'What are normal pregnancy symptoms?',
+      'When should I call my doctor during pregnancy?',
+      'How can I manage morning sickness?',
+      'What are warning signs during pregnancy?'
+    ]
+  } else if (question.includes('baby') || question.includes('fetal') || question.includes('development') || question.includes('growth')) {
+    return [
+      'How is my baby developing each trimester?',
+      'When can I feel my baby move?',
+      'What affects fetal development?',
+      'How can I bond with my baby before birth?'
+    ]
+  } else if (question.includes('birth') || question.includes('labor') || question.includes('delivery') || question.includes('contractions')) {
+    return [
+      'What are the signs of labor?',
+      'How can I prepare for childbirth?',
+      'What pain relief options are available during labor?',
+      'What should I pack for the hospital?'
+    ]
+  } else if (question.includes('weight') || question.includes('gain') || question.includes('size')) {
+    return [
+      'How much weight should I gain during pregnancy?',
+      'Is my weight gain on track?',
+      'What affects pregnancy weight gain?',
+      'How can I maintain a healthy weight during pregnancy?'
+    ]
+  } else {
+    // Default general pregnancy questions
+    return [
+      'What should I expect during each trimester?',
+      'How often should I have prenatal checkups?',
+      'What are the most important things for a healthy pregnancy?',
+      'What questions should I ask my doctor?'
+    ]
+  }
+}
+
 export async function POST(req: NextRequest) {
   console.log('API route hit: /api/chat')
 
@@ -133,6 +191,8 @@ SUGGESTED_QUESTIONS:
             },
           ],
           stream: false,
+        }, {
+          timeout: 30000, // 30 second timeout
         })
 
         const fullResponse = completion.choices[0]?.message?.content || ''
@@ -290,16 +350,65 @@ SUGGESTED_QUESTIONS:
 
         // Get the stream from Hugging Face OpenAI endpoint
         console.log('Starting stream from Hugging Face OpenAI endpoint')
-        const stream = await openai.chat.completions.create({
-          model: 'tgi',
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          stream: true,
-        })
+        
+        let stream
+        try {
+          stream = await openai.chat.completions.create({
+            model: 'tgi',
+            messages: [
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+            stream: true,
+          }, {
+            timeout: 30000, // 30 second timeout
+          })
+        } catch (apiError) {
+          console.error('Hugging Face API error:', apiError)
+          
+          // If the API is unavailable, send a helpful fallback response
+          const fallbackResponse = `ANSWER: I'm currently experiencing technical difficulties connecting to our AI service. However, I can still provide you with some general prenatal health guidance.
+
+For your question about "${question}", I recommend:
+- Consulting with your healthcare provider for personalized medical advice
+- Checking reliable medical resources like the American College of Obstetricians and Gynecologists (ACOG)
+- Contacting your doctor immediately if you have urgent health concerns
+
+IMPORTANT: This information is for educational purposes only and is not a substitute for professional medical advice. Always consult with your healthcare provider for medical concerns.
+
+SUGGESTED_QUESTIONS:
+1. What are the warning signs during pregnancy?
+2. How often should I have prenatal checkups?
+3. What vitamins should I take during pregnancy?
+4. What foods are safe during pregnancy?`
+
+          // Send fallback response in chunks to simulate streaming
+          for (let i = 0; i < fallbackResponse.length; i += 5) {
+            const chunk = fallbackResponse.slice(i, i + 5)
+            await writer.write(
+              encoder.encode('data: ' + JSON.stringify({ content: chunk, type: 'chunk' }) + '\n\n')
+            )
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+          
+          // Send contextual suggested questions based on the user's question
+          const contextualSuggestions = generateContextualSuggestions(question)
+          await writer.write(
+            encoder.encode(
+              'data: ' + JSON.stringify({ 
+                type: 'suggestions', 
+                suggestions: contextualSuggestions 
+              }) + '\n\n'
+            )
+          )
+          
+          // Send completion message
+          await writer.write(encoder.encode('data: ' + JSON.stringify({ type: 'done' }) + '\n\n'))
+          await writer.close()
+          return
+        }
 
         let accumulatedResponse = ''
         let gibberishDetected = false
@@ -345,6 +454,74 @@ SUGGESTED_QUESTIONS:
           }
         }
 
+        // Parse the complete response to extract suggested questions
+        if (!gibberishDetected && accumulatedResponse) {
+          console.log('Parsing suggestions from accumulated response:', accumulatedResponse.length, 'characters')
+          const suggestionsMatch = accumulatedResponse.match(/SUGGESTED_QUESTIONS:\s*([\s\S]*)/)
+          if (suggestionsMatch) {
+            const suggestionsText = suggestionsMatch[1]
+            const extractedSuggestions = suggestionsText
+              .split(/\d+\.\s*/)
+              .slice(1) // Remove first empty element
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+              .slice(0, 4) // Limit to 4 suggestions
+              .map(sanitizeEnglish)
+
+            console.log('Extracted suggestions:', extractedSuggestions)
+            if (extractedSuggestions.length > 0) {
+              // Send suggested questions as a separate event
+              await writer.write(
+                encoder.encode(
+                  'data: ' + JSON.stringify({ 
+                    type: 'suggestions', 
+                    suggestions: extractedSuggestions 
+                  }) + '\n\n'
+                )
+              )
+            } else {
+              // Fallback to contextual suggestions if no suggestions in response
+              console.log('No suggestions found in response, generating contextual ones for:', question)
+              const contextualSuggestions = generateContextualSuggestions(question)
+              await writer.write(
+                encoder.encode(
+                  'data: ' + JSON.stringify({ 
+                    type: 'suggestions', 
+                    suggestions: contextualSuggestions 
+                  }) + '\n\n'
+                )
+              )
+            }
+          } else {
+            // No SUGGESTED_QUESTIONS section found, generate contextual ones
+            console.log('No SUGGESTED_QUESTIONS section found, generating contextual ones for:', question)
+            const contextualSuggestions = generateContextualSuggestions(question)
+            await writer.write(
+              encoder.encode(
+                'data: ' + JSON.stringify({ 
+                  type: 'suggestions', 
+                  suggestions: contextualSuggestions 
+                }) + '\n\n'
+              )
+            )
+          }
+        } else if (gibberishDetected) {
+          // Already handled in the gibberish section above
+          console.log('Gibberish detected, suggestions already sent')
+        } else {
+          // No accumulated response, send contextual suggestions
+          console.log('No accumulated response, generating contextual suggestions for:', question)
+          const contextualSuggestions = generateContextualSuggestions(question)
+          await writer.write(
+            encoder.encode(
+              'data: ' + JSON.stringify({ 
+                type: 'suggestions', 
+                suggestions: contextualSuggestions 
+              }) + '\n\n'
+            )
+          )
+        }
+
         // If gibberish was detected, send fallback response instead
         if (gibberishDetected) {
           console.log('Gibberish detected, sending fallback response instead of static content')
@@ -357,7 +534,8 @@ IMPORTANT: This is an AI assistant providing educational information only and is
 SUGGESTED_QUESTIONS:
 1. What are the signs of a healthy pregnancy?
 2. How often should I have prenatal checkups?
-3. What foods should I eat during pregnancy?`
+3. What foods should I eat during pregnancy?
+4. What exercises are safe during pregnancy?`
 
           // Send fallback response in chunks to simulate streaming
           for (const char of fallbackText) {
@@ -366,6 +544,23 @@ SUGGESTED_QUESTIONS:
             )
             await new Promise((resolve) => setTimeout(resolve, 10))
           }
+
+          // Parse and send suggested questions from fallback
+          const fallbackSuggestions = [
+            'What are the signs of a healthy pregnancy?',
+            'How often should I have prenatal checkups?', 
+            'What foods should I eat during pregnancy?',
+            'What exercises are safe during pregnancy?'
+          ]
+          
+          await writer.write(
+            encoder.encode(
+              'data: ' + JSON.stringify({ 
+                type: 'suggestions', 
+                suggestions: fallbackSuggestions 
+              }) + '\n\n'
+            )
+          )
         }
 
         // Send completion message

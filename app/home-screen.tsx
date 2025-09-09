@@ -187,9 +187,16 @@ export default function HomeScreen() {
                       const { answer, suggestions } = parseResponseClient(fullResponse)
                       setStreamingResponse(enforceEnglish(answer || fullResponse))
                       if (suggestions.length) {
+                        console.log('Setting suggestions from parsed response:', suggestions)
                         setStreamingSuggestions(suggestions.map(enforceEnglish))
                       }
                       scrollToBottomForced()
+                    } else if (data.type === 'suggestions' && data.suggestions) {
+                      // Handle direct suggestions from API
+                      console.log('Received direct suggestions from API:', data.suggestions)
+                      setStreamingSuggestions(data.suggestions.map(enforceEnglish))
+                    } else if (data.type === 'done') {
+                      console.log('Stream completed, final suggestions:', streamingSuggestions)
                     }
                   } catch {}
                 }
@@ -231,15 +238,21 @@ export default function HomeScreen() {
         const finalAnswer = enforceEnglish(finalParsedAnswer || fullResponse)
         const finalSuggestions = finalParsedSuggestions.map(enforceEnglish)
 
-        // Ensure we always have some suggestions, fallback to default if none parsed
-        const ensuredSuggestions =
-          finalSuggestions.length > 0
+        // Use streaming suggestions if available, otherwise use parsed suggestions, otherwise use contextual fallback
+        const ensuredSuggestions = streamingSuggestions.length > 0 
+          ? streamingSuggestions 
+          : finalSuggestions.length > 0
             ? finalSuggestions
             : [
                 'What vitamins should I take during pregnancy?',
                 'How often should I have prenatal check-ups?',
                 'What foods should I avoid during pregnancy?',
+                'What exercises are safe during pregnancy?'
               ]
+
+        console.log('Final suggestions being saved:', ensuredSuggestions)
+        console.log('Streaming suggestions:', streamingSuggestions)
+        console.log('Parsed suggestions:', finalSuggestions)
 
         setMessages((prev) =>
           prev.map((m) =>
