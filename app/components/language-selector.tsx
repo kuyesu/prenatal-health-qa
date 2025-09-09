@@ -9,7 +9,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ChevronDown, Globe } from 'lucide-react'
 import { motion } from 'framer-motion'
-interface LanguageSelectorProps { language: 'en'; setLanguage: (lang: 'en') => void }
+
+interface LanguageSelectorProps {
+  language: 'en'
+  setLanguage: (lang: 'en') => void
+}
 
 export default function LanguageSelector({ language, setLanguage }: LanguageSelectorProps) {
   return (

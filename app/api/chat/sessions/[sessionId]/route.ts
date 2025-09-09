@@ -1,27 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { authenticateToken } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import { authenticateToken } from '@/lib/auth'
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { sessionId: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { sessionId: string } }) {
   try {
-    const authResult = await authenticateToken(request);
+    const authResult = await authenticateToken(request)
     if ('error' in authResult) {
-      return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
-      );
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
-    const { message } = await request.json();
+    const { message } = await request.json()
 
     if (!message) {
-      return NextResponse.json(
-        { error: 'Message is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
 
     // Verify the chat session exists and belongs to the user
@@ -30,18 +21,16 @@ export async function POST(
         id: params.sessionId,
         userId: authResult.user.id,
       },
-    });
+    })
 
     if (!chatSession) {
-      return NextResponse.json(
-        { error: 'Chat session not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Chat session not found' }, { status: 404 })
     }
 
     // Here you would integrate with your AI service to get a response
     // For now, I'll add a placeholder response
-    const aiResponse = 'Thank you for your message. I\'m here to help with your prenatal health questions.';
+    const aiResponse =
+      "Thank you for your message. I'm here to help with your prenatal health questions."
 
     // Create the chat message
     const chatMessage = await prisma.chatMessage.create({
@@ -56,35 +45,26 @@ export async function POST(
           'What foods should I avoid?',
         ],
       },
-    });
+    })
 
     return NextResponse.json({
       success: true,
-      data: { 
+      data: {
         chatMessage,
         response: aiResponse,
       },
-    });
+    })
   } catch (error) {
-    console.error('Send message error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Send message error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { sessionId: string } }
-) {
+export async function GET(request: NextRequest, { params }: { params: { sessionId: string } }) {
   try {
-    const authResult = await authenticateToken(request);
+    const authResult = await authenticateToken(request)
     if ('error' in authResult) {
-      return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
-      );
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
     // Get chat session with messages
@@ -98,24 +78,18 @@ export async function GET(
           orderBy: { createdAt: 'asc' },
         },
       },
-    });
+    })
 
     if (!chatSession) {
-      return NextResponse.json(
-        { error: 'Chat session not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Chat session not found' }, { status: 404 })
     }
 
     return NextResponse.json({
       success: true,
       data: { chatSession },
-    });
+    })
   } catch (error) {
-    console.error('Get chat session error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Get chat session error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

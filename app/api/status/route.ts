@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
 
 export async function GET() {
   try {
     // Test database connection
-    const userCount = await prisma.user.count();
-    const healthTipCount = await prisma.healthTip.count();
-    const faqCount = await prisma.fAQ.count();
+    const userCount = await prisma.user.count()
+    const healthTipCount = await prisma.healthTip.count()
+    const faqCount = await prisma.fAQ.count()
 
     return NextResponse.json({
       success: true,
@@ -52,9 +52,9 @@ export async function GET() {
           ],
         },
       },
-    });
+    })
   } catch (error) {
-    console.error('API test error:', error);
+    console.error('API test error:', error)
     return NextResponse.json(
       {
         success: false,
@@ -62,6 +62,6 @@ export async function GET() {
         message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
-    );
+    )
   }
 }

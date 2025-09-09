@@ -81,7 +81,7 @@ SUGGESTED_QUESTIONS:
     // Analysis
     const analyzeText = (text: string, label: string) => {
       const spaceCount = (text.match(/ /g) || []).length
-      const wordCount = text.split(/\s+/).filter(w => w.length > 0).length
+      const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length
       const hasLongSequences = /[a-z]{25,}/.test(text)
       const hasProperSpacing = spaceCount > text.length / 20
       const avgWordLength = text.replace(/[^a-zA-Z]/g, '').length / Math.max(wordCount, 1)
@@ -94,7 +94,7 @@ SUGGESTED_QUESTIONS:
       console.log('Has proper spacing ratio:', hasProperSpacing)
       console.log('Contains ANSWER:', text.includes('ANSWER:'))
       console.log('Contains SUGGESTED_QUESTIONS:', text.includes('SUGGESTED_QUESTIONS:'))
-      
+
       if (hasLongSequences) {
         const matches = text.match(/[a-z]{25,}/g)
         console.log('Long sequences found:', matches?.slice(0, 3))
@@ -105,43 +105,56 @@ SUGGESTED_QUESTIONS:
         wordCount,
         hasLongSequences,
         hasProperSpacing,
-        avgWordLength
+        avgWordLength,
       }
     }
 
     const nonStreamingAnalysis = analyzeText(fullResponse, 'NON-STREAMING')
     const streamingAnalysis = analyzeText(streamedContent, 'STREAMING')
 
-    return new Response(JSON.stringify({
-      success: true,
-      prompt_length: prompt.length,
-      non_streaming: {
-        content: fullResponse,
-        length: fullResponse.length,
-        analysis: nonStreamingAnalysis
-      },
-      streaming: {
-        content: streamedContent,
-        length: streamedContent.length,
-        chunk_count: chunkCount,
-        first_10_chunks: chunks.slice(0, 10),
-        analysis: streamingAnalysis,
-        matches_non_streaming: streamedContent === fullResponse
+    return new Response(
+      JSON.stringify(
+        {
+          success: true,
+          prompt_length: prompt.length,
+          non_streaming: {
+            content: fullResponse,
+            length: fullResponse.length,
+            analysis: nonStreamingAnalysis,
+          },
+          streaming: {
+            content: streamedContent,
+            length: streamedContent.length,
+            chunk_count: chunkCount,
+            first_10_chunks: chunks.slice(0, 10),
+            analysis: streamingAnalysis,
+            matches_non_streaming: streamedContent === fullResponse,
+          },
+        },
+        null,
+        2
+      ),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
       }
-    }, null, 2), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-
+    )
   } catch (error) {
     console.error('Error testing model:', error)
-    return new Response(JSON.stringify({
-      error: 'Test failed',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
-    }, null, 2), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return new Response(
+      JSON.stringify(
+        {
+          error: 'Test failed',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        null,
+        2
+      ),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
   }
 }

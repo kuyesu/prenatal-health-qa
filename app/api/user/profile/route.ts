@@ -1,15 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { authenticateToken } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import { authenticateToken } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await authenticateToken(request);
+    const authResult = await authenticateToken(request)
     if ('error' in authResult) {
-      return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
-      );
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
     const user = await prisma.user.findUnique({
@@ -29,40 +26,31 @@ export async function GET(request: NextRequest) {
         createdAt: true,
         updatedAt: true,
       },
-    });
+    })
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     return NextResponse.json({
       success: true,
       data: { user },
-    });
+    })
   } catch (error) {
-    console.error('Get profile error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Get profile error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const authResult = await authenticateToken(request);
+    const authResult = await authenticateToken(request)
     if ('error' in authResult) {
-      return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
-      );
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
-    const updateData = await request.json();
-    
+    const updateData = await request.json()
+
     // Only allow specific fields to be updated
     const allowedFields = [
       'name',
@@ -72,12 +60,12 @@ export async function PUT(request: NextRequest) {
       'healthConditions',
       'concerns',
       'preferredLanguage',
-    ];
+    ]
 
-    const filteredData: any = {};
+    const filteredData: any = {}
     for (const field of allowedFields) {
       if (updateData[field] !== undefined) {
-        filteredData[field] = updateData[field];
+        filteredData[field] = updateData[field]
       }
     }
 
@@ -102,17 +90,14 @@ export async function PUT(request: NextRequest) {
         createdAt: true,
         updatedAt: true,
       },
-    });
+    })
 
     return NextResponse.json({
       success: true,
       data: { user: updatedUser },
-    });
+    })
   } catch (error) {
-    console.error('Update profile error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Update profile error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

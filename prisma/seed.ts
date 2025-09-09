@@ -1,15 +1,16 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client'
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 async function main() {
-  console.log('🌱 Starting seed...');
+  console.log('🌱 Starting seed...')
 
   // Seed Health Tips
   const healthTips = [
     {
       title: 'Take Prenatal Vitamins Daily',
-      content: 'Prenatal vitamins containing folic acid, iron, and calcium are essential for your baby\'s development. Take them daily as recommended by your healthcare provider.',
+      content:
+        "Prenatal vitamins containing folic acid, iron, and calcium are essential for your baby's development. Take them daily as recommended by your healthcare provider.",
       category: 'nutrition',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 40,
@@ -19,7 +20,8 @@ async function main() {
     },
     {
       title: 'Stay Hydrated',
-      content: 'Drink at least 8-10 glasses of water daily. Proper hydration helps prevent constipation, reduces swelling, and supports increased blood volume.',
+      content:
+        'Drink at least 8-10 glasses of water daily. Proper hydration helps prevent constipation, reduces swelling, and supports increased blood volume.',
       category: 'nutrition',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 40,
@@ -29,7 +31,8 @@ async function main() {
     },
     {
       title: 'Gentle Exercise is Beneficial',
-      content: 'Light exercise like walking, swimming, or prenatal yoga can help reduce back pain, improve mood, and prepare your body for labor.',
+      content:
+        'Light exercise like walking, swimming, or prenatal yoga can help reduce back pain, improve mood, and prepare your body for labor.',
       category: 'exercise',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 36,
@@ -38,8 +41,9 @@ async function main() {
       priority: 4,
     },
     {
-      title: 'Monitor Baby\'s Movements',
-      content: 'Around week 20, you\'ll start feeling baby movements. After week 28, track kick counts - you should feel at least 10 movements in 2 hours.',
+      title: "Monitor Baby's Movements",
+      content:
+        "Around week 20, you'll start feeling baby movements. After week 28, track kick counts - you should feel at least 10 movements in 2 hours.",
       category: 'monitoring',
       pregnancyWeekMin: 20,
       pregnancyWeekMax: 40,
@@ -49,7 +53,8 @@ async function main() {
     },
     {
       title: 'Get Adequate Sleep',
-      content: 'Aim for 7-9 hours of sleep per night. Use pregnancy pillows for comfort and try sleeping on your left side to improve blood flow.',
+      content:
+        'Aim for 7-9 hours of sleep per night. Use pregnancy pillows for comfort and try sleeping on your left side to improve blood flow.',
       category: 'wellness',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 40,
@@ -57,17 +62,18 @@ async function main() {
       language: 'en',
       priority: 3,
     },
-  ];
+  ]
 
   for (const tip of healthTips) {
-    await prisma.healthTip.create({ data: tip });
+    await prisma.healthTip.create({ data: tip })
   }
 
   // Seed FAQs
   const faqs = [
     {
       question: 'Is it safe to exercise during pregnancy?',
-      answer: 'Yes, exercise is generally safe and beneficial during pregnancy. Light to moderate exercise like walking, swimming, and prenatal yoga can help reduce back pain, improve mood, and prepare your body for labor. Always consult your healthcare provider before starting any exercise routine.',
+      answer:
+        'Yes, exercise is generally safe and beneficial during pregnancy. Light to moderate exercise like walking, swimming, and prenatal yoga can help reduce back pain, improve mood, and prepare your body for labor. Always consult your healthcare provider before starting any exercise routine.',
       category: 'exercise',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 40,
@@ -77,7 +83,8 @@ async function main() {
     },
     {
       question: 'What foods should I avoid during pregnancy?',
-      answer: 'Avoid raw or undercooked meats, fish high in mercury, unpasteurized dairy products, raw eggs, alcohol, and limit caffeine intake. Also avoid deli meats unless heated until steaming hot.',
+      answer:
+        'Avoid raw or undercooked meats, fish high in mercury, unpasteurized dairy products, raw eggs, alcohol, and limit caffeine intake. Also avoid deli meats unless heated until steaming hot.',
       category: 'nutrition',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 40,
@@ -87,7 +94,8 @@ async function main() {
     },
     {
       question: 'How much weight should I gain during pregnancy?',
-      answer: 'Weight gain depends on your pre-pregnancy BMI. Generally: Normal weight (BMI 18.5-24.9): 25-35 lbs, Underweight (BMI <18.5): 28-40 lbs, Overweight (BMI 25-29.9): 15-25 lbs, Obese (BMI ≥30): 11-20 lbs.',
+      answer:
+        'Weight gain depends on your pre-pregnancy BMI. Generally: Normal weight (BMI 18.5-24.9): 25-35 lbs, Underweight (BMI <18.5): 28-40 lbs, Overweight (BMI 25-29.9): 15-25 lbs, Obese (BMI ≥30): 11-20 lbs.',
       category: 'health',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 40,
@@ -97,7 +105,8 @@ async function main() {
     },
     {
       question: 'When should I call my doctor?',
-      answer: 'Call immediately for: severe bleeding, severe abdominal pain, persistent vomiting, severe headaches, vision changes, decreased baby movements after 28 weeks, signs of preterm labor, or fever over 100.4°F.',
+      answer:
+        'Call immediately for: severe bleeding, severe abdominal pain, persistent vomiting, severe headaches, vision changes, decreased baby movements after 28 weeks, signs of preterm labor, or fever over 100.4°F.',
       category: 'emergency',
       pregnancyWeekMin: 1,
       pregnancyWeekMax: 40,
@@ -107,7 +116,8 @@ async function main() {
     },
     {
       question: 'What are the signs of labor?',
-      answer: 'Signs include regular contractions that get stronger and closer together, water breaking, bloody show (mucus plug), lower back pain, and pelvic pressure. Early labor contractions are usually 5-20 minutes apart.',
+      answer:
+        'Signs include regular contractions that get stronger and closer together, water breaking, bloody show (mucus plug), lower back pain, and pelvic pressure. Early labor contractions are usually 5-20 minutes apart.',
       category: 'labor',
       pregnancyWeekMin: 36,
       pregnancyWeekMax: 42,
@@ -117,7 +127,8 @@ async function main() {
     },
     {
       question: 'How can I manage morning sickness?',
-      answer: 'Eat small, frequent meals, avoid empty stomach, try ginger tea or crackers, stay hydrated, get fresh air, and rest when possible. If severe, consult your doctor about anti-nausea medications.',
+      answer:
+        'Eat small, frequent meals, avoid empty stomach, try ginger tea or crackers, stay hydrated, get fresh air, and rest when possible. If severe, consult your doctor about anti-nausea medications.',
       category: 'symptoms',
       pregnancyWeekMin: 4,
       pregnancyWeekMax: 16,
@@ -125,22 +136,22 @@ async function main() {
       language: 'en',
       popularity: 30,
     },
-  ];
+  ]
 
   for (const faq of faqs) {
-    await prisma.fAQ.create({ data: faq });
+    await prisma.fAQ.create({ data: faq })
   }
 
-  console.log('✅ Seed completed successfully!');
-  console.log(`📝 Created ${healthTips.length} health tips`);
-  console.log(`❓ Created ${faqs.length} FAQs`);
+  console.log('✅ Seed completed successfully!')
+  console.log(`📝 Created ${healthTips.length} health tips`)
+  console.log(`❓ Created ${faqs.length} FAQs`)
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
-    process.exit(1);
+    console.error('❌ Seed failed:', e)
+    process.exit(1)
   })
   .finally(async () => {
-    await prisma.$disconnect();
-  });
+    await prisma.$disconnect()
+  })

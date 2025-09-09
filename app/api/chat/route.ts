@@ -7,17 +7,17 @@ import { authenticateToken } from '@/lib/auth'
 // Removes any unexpected unicode artifacts that may slip through the model output.
 function sanitizeEnglish(text: string): string {
   if (!text) return ''
-  
+
   // Since API output is clean, do minimal sanitization
   // Only check for obvious gibberish patterns
   const hasLongLowercaseSequence = /[a-z]{35,}/.test(text) // Increased threshold
   const lacksProperSpacing = text.length > 100 && (text.match(/ /g) || []).length < 5 // Very few spaces for very long text
-  
+
   if (hasLongLowercaseSequence || lacksProperSpacing) {
     console.log('Detected problematic text pattern:', text.substring(0, 100))
     return ''
   }
-  
+
   // Minimal cleanup - preserve the model's formatting
   return text
     .replace(/\u00A0/g, ' ') // non-breaking spaces to normal
@@ -60,10 +60,10 @@ export async function POST(req: NextRequest) {
     try {
       const authResult = await authenticateToken(req)
       if ('error' in authResult) {
-        return new Response(
-          JSON.stringify({ error: authResult.error }),
-          { status: authResult.status, headers: { 'Content-Type': 'application/json' } }
-        )
+        return new Response(JSON.stringify({ error: authResult.error }), {
+          status: authResult.status,
+          headers: { 'Content-Type': 'application/json' },
+        })
       }
 
       // Create new chat session if needed or get existing active session
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       // Get actual AI response using the same model as web version
       let aiResponse = ''
       let suggestedQuestions: string[] = []
-      
+
       try {
         // Check if HF_TOKEN is available
         if (!process.env.HF_TOKEN) {
@@ -136,31 +136,34 @@ SUGGESTED_QUESTIONS:
         })
 
         const fullResponse = completion.choices[0]?.message?.content || ''
-        
+
         // Parse the response to extract answer and suggestions
         const answerMatch = fullResponse.match(/ANSWER:\s*([\s\S]*?)(?=SUGGESTED_QUESTIONS:|$)/)
         const suggestionsMatch = fullResponse.match(/SUGGESTED_QUESTIONS:\s*([\s\S]*)/)
-        
+
         if (answerMatch) {
           aiResponse = sanitizeEnglish(answerMatch[1].trim())
         }
-        
+
         if (suggestionsMatch) {
           const suggestionsText = suggestionsMatch[1]
           const extractedSuggestions = suggestionsText
             .split(/\d+\.\s*/)
             .slice(1) // Remove first empty element
-            .map(s => s.trim())
-            .filter(s => s.length > 0)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
             .slice(0, 4) // Limit to 4 suggestions
             .map(sanitizeEnglish)
-          
-          suggestedQuestions = extractedSuggestions.length > 0 ? extractedSuggestions : [
-            'What should I eat during pregnancy?',
-            'What exercises are safe during pregnancy?',
-            'What are normal pregnancy symptoms?',
-            'When should I contact my doctor?',
-          ]
+
+          suggestedQuestions =
+            extractedSuggestions.length > 0
+              ? extractedSuggestions
+              : [
+                  'What should I eat during pregnancy?',
+                  'What exercises are safe during pregnancy?',
+                  'What are normal pregnancy symptoms?',
+                  'When should I contact my doctor?',
+                ]
         } else {
           suggestedQuestions = [
             'What should I eat during pregnancy?',
@@ -174,7 +177,6 @@ SUGGESTED_QUESTIONS:
         if (!aiResponse) {
           aiResponse = `Thank you for your question about prenatal health. For your specific question: "${question}", I recommend consulting with your healthcare provider for personalized medical advice. IMPORTANT: This information is for educational purposes only and is not a substitute for professional medical advice.`
         }
-
       } catch (error) {
         console.error('Error getting AI response for mobile:', error)
         // Fallback response
@@ -211,10 +213,10 @@ SUGGESTED_QUESTIONS:
       )
     } catch (error) {
       console.error('Mobile chat error:', error)
-      return new Response(
-        JSON.stringify({ error: 'Internal server error' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'Internal server error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
   }
 
@@ -278,74 +280,75 @@ SUGGESTED_QUESTIONS:
       },
     })
 
-        // Process in the background
-        ;(async () => {
-          try {
-            // Send an initial message to establish the connection
-            await writer.write(
-              encoder.encode('data: ' + JSON.stringify({ content: '', type: 'init' }) + '\n\n')
-            )
+    // Process in the background
+    ;(async () => {
+      try {
+        // Send an initial message to establish the connection
+        await writer.write(
+          encoder.encode('data: ' + JSON.stringify({ content: '', type: 'init' }) + '\n\n')
+        )
 
-            // Get the stream from Hugging Face OpenAI endpoint
-            console.log('Starting stream from Hugging Face OpenAI endpoint')
-            const stream = await openai.chat.completions.create({
-              model: 'tgi',
-              messages: [
-                {
-                  role: 'user',
-                  content: prompt,
-                },
-              ],
-              stream: true,
-            })
+        // Get the stream from Hugging Face OpenAI endpoint
+        console.log('Starting stream from Hugging Face OpenAI endpoint')
+        const stream = await openai.chat.completions.create({
+          model: 'tgi',
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          stream: true,
+        })
 
-            let accumulatedResponse = ''
-            let gibberishDetected = false
-            let chunkCount = 0
+        let accumulatedResponse = ''
+        let gibberishDetected = false
+        let chunkCount = 0
 
-            for await (const chunk of stream) {
-              const newContent = chunk.choices[0]?.delta?.content
-              if (newContent) {
-                accumulatedResponse += newContent
-                chunkCount++
-                
-                // Check after more chunks to be less aggressive (reduced logging)
-                if (chunkCount > 10) {
-                  const recentText = accumulatedResponse.slice(-200) // Check last 200 chars
-                  const hasProperSpacing = (recentText.match(/ /g) || []).length > recentText.length / 15 // More lenient
-                  const hasLongConcatenation = /[a-z]{40,}/.test(recentText) // Increased threshold
-                  
-                  if (!hasProperSpacing || hasLongConcatenation) {
-                    console.log('Detected concatenated words in stream, switching to fallback')
-                    gibberishDetected = true
-                    break
-                  }
-                }
-                
-                const sanitized = sanitizeEnglish(newContent)
-                
-                // Only send if we have actual content - don't trigger fallback for empty sanitization
-                if (sanitized) {
-                  await writer.write(
-                    encoder.encode(
-                      'data: ' + JSON.stringify({ content: sanitized, type: 'chunk' }) + '\n\n'
-                    )
-                  )
-                } else if (newContent.length <= 5) {
-                  // For very short content that gets sanitized away, just send it through
-                  await writer.write(
-                    encoder.encode(
-                      'data: ' + JSON.stringify({ content: newContent, type: 'chunk' }) + '\n\n'
-                    )
-                  )
-                }
+        for await (const chunk of stream) {
+          const newContent = chunk.choices[0]?.delta?.content
+          if (newContent) {
+            accumulatedResponse += newContent
+            chunkCount++
+
+            // Check after more chunks to be less aggressive (reduced logging)
+            if (chunkCount > 10) {
+              const recentText = accumulatedResponse.slice(-200) // Check last 200 chars
+              const hasProperSpacing =
+                (recentText.match(/ /g) || []).length > recentText.length / 15 // More lenient
+              const hasLongConcatenation = /[a-z]{40,}/.test(recentText) // Increased threshold
+
+              if (!hasProperSpacing || hasLongConcatenation) {
+                console.log('Detected concatenated words in stream, switching to fallback')
+                gibberishDetected = true
+                break
               }
             }
 
-            // If gibberish was detected, send fallback response instead
-            if (gibberishDetected) {
-              console.log('Gibberish detected, sending fallback response instead of static content')
-              const fallbackText = `ANSWER: I'm experiencing some technical difficulties right now. Please try asking your question again.
+            const sanitized = sanitizeEnglish(newContent)
+
+            // Only send if we have actual content - don't trigger fallback for empty sanitization
+            if (sanitized) {
+              await writer.write(
+                encoder.encode(
+                  'data: ' + JSON.stringify({ content: sanitized, type: 'chunk' }) + '\n\n'
+                )
+              )
+            } else if (newContent.length <= 5) {
+              // For very short content that gets sanitized away, just send it through
+              await writer.write(
+                encoder.encode(
+                  'data: ' + JSON.stringify({ content: newContent, type: 'chunk' }) + '\n\n'
+                )
+              )
+            }
+          }
+        }
+
+        // If gibberish was detected, send fallback response instead
+        if (gibberishDetected) {
+          console.log('Gibberish detected, sending fallback response instead of static content')
+          const fallbackText = `ANSWER: I'm experiencing some technical difficulties right now. Please try asking your question again.
 
 For immediate medical concerns, please contact your healthcare provider directly.
 
@@ -356,36 +359,34 @@ SUGGESTED_QUESTIONS:
 2. How often should I have prenatal checkups?
 3. What foods should I eat during pregnancy?`
 
-              // Send fallback response in chunks to simulate streaming
-              for (const char of fallbackText) {
-                await writer.write(
-                  encoder.encode(
-                    'data: ' + JSON.stringify({ content: char, type: 'chunk' }) + '\n\n'
-                  )
-                )
-                await new Promise(resolve => setTimeout(resolve, 10))
-              }
-            }
-
-            // Send completion message
-            await writer.write(encoder.encode('data: ' + JSON.stringify({ type: 'done' }) + '\n\n'))
-          } catch (error) {
-            console.error('Error in streaming:', error)
+          // Send fallback response in chunks to simulate streaming
+          for (const char of fallbackText) {
             await writer.write(
-              encoder.encode(
-                'data: ' +
-                  JSON.stringify({
-                    error: 'Error generating response',
-                    message: error instanceof Error ? error.message : 'Unknown error',
-                    type: 'error',
-                  }) +
-                  '\n\n'
-              )
+              encoder.encode('data: ' + JSON.stringify({ content: char, type: 'chunk' }) + '\n\n')
             )
-          } finally {
-            await writer.close()
+            await new Promise((resolve) => setTimeout(resolve, 10))
           }
-        })()
+        }
+
+        // Send completion message
+        await writer.write(encoder.encode('data: ' + JSON.stringify({ type: 'done' }) + '\n\n'))
+      } catch (error) {
+        console.error('Error in streaming:', error)
+        await writer.write(
+          encoder.encode(
+            'data: ' +
+              JSON.stringify({
+                error: 'Error generating response',
+                message: error instanceof Error ? error.message : 'Unknown error',
+                type: 'error',
+              }) +
+              '\n\n'
+          )
+        )
+      } finally {
+        await writer.close()
+      }
+    })()
 
     return response
   } catch (error) {

@@ -1,40 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { authenticateToken } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import { authenticateToken } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const category = searchParams.get('category');
-    const pregnancyWeek = searchParams.get('pregnancyWeek');
-    const search = searchParams.get('search');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const { searchParams } = new URL(request.url)
+    const category = searchParams.get('category')
+    const pregnancyWeek = searchParams.get('pregnancyWeek')
+    const search = searchParams.get('search')
+    const limit = parseInt(searchParams.get('limit') || '20')
 
     // Build filter conditions
     const where: any = {
       isActive: true,
-    };
+    }
 
     if (category) {
-      where.category = category;
+      where.category = category
     }
 
     if (pregnancyWeek) {
-      const weekNum = parseInt(pregnancyWeek);
+      const weekNum = parseInt(pregnancyWeek)
       where.AND = [
         {
-          OR: [
-            { pregnancyWeekMin: { lte: weekNum } },
-            { pregnancyWeekMin: null },
-          ],
+          OR: [{ pregnancyWeekMin: { lte: weekNum } }, { pregnancyWeekMin: null }],
         },
         {
-          OR: [
-            { pregnancyWeekMax: { gte: weekNum } },
-            { pregnancyWeekMax: null },
-          ],
+          OR: [{ pregnancyWeekMax: { gte: weekNum } }, { pregnancyWeekMax: null }],
         },
-      ];
+      ]
     }
 
     if (search) {
@@ -42,37 +36,31 @@ export async function GET(request: NextRequest) {
         { question: { contains: search, mode: 'insensitive' } },
         { answer: { contains: search, mode: 'insensitive' } },
         { tags: { has: search } },
-      ];
+      ]
     }
 
     const faqs = await prisma.fAQ.findMany({
       where,
       take: limit,
       orderBy: { popularity: 'desc' },
-    });
+    })
 
     return NextResponse.json({
       success: true,
       data: { faqs },
-    });
+    })
   } catch (error) {
-    console.error('Get FAQs error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Get FAQs error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 // Admin endpoint to create FAQs
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await authenticateToken(request);
+    const authResult = await authenticateToken(request)
     if ('error' in authResult) {
-      return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
-      );
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
     const {
@@ -84,13 +72,13 @@ export async function POST(request: NextRequest) {
       tags,
       language,
       popularity,
-    } = await request.json();
+    } = await request.json()
 
     if (!question || !answer || !category) {
       return NextResponse.json(
         { error: 'Question, answer, and category are required' },
         { status: 400 }
-      );
+      )
     }
 
     const faq = await prisma.fAQ.create({
@@ -104,17 +92,14 @@ export async function POST(request: NextRequest) {
         language: language || 'en',
         popularity: popularity || 0,
       },
-    });
+    })
 
     return NextResponse.json({
       success: true,
       data: { faq },
-    });
+    })
   } catch (error) {
-    console.error('Create FAQ error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Create FAQ error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

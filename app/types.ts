@@ -1,4 +1,4 @@
-export type Language = "en"
+export type Language = 'en'
 
 export interface Question {
   id: string
@@ -8,4 +8,3 @@ export interface Question {
   suggestedQuestions: string[]
   createdAt: string
 }
-

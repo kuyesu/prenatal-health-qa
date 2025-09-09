@@ -8,6 +8,15 @@ import { useTheme } from 'next-themes'
 import LanguageSelector from './language-selector'
 import type { Language } from '../types'
 import Image from 'next/image'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import Link from 'next/link'
 
 interface HealthHeaderProps {
   language: Language
@@ -72,7 +81,29 @@ export default function HealthHeader({
         </div>
 
         <div className="flex items-center gap-3">
-          <LanguageSelector language={language} setLanguage={setLanguage} languages={languages} />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Download on Google Play"
+            className="h-auto px-0 py-0 bg-transparent hover:bg-transparent focus:bg-transparent active:bg-transparent hover:scale-105 focus:scale-105 active:scale-95 transition-transform"
+          >
+            <Link
+              href={'https://expo.dev/artifacts/eas/sRgSEDFW5TPxWHmSu6LGSS.apk'}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Image
+                src="/Store_Google_Play_Type_Dark.svg"
+                alt="Get it on Google Play"
+                width={120}
+                height={36}
+                style={{ height: 'auto', width: 'auto', maxWidth: '120px', maxHeight: '36px' }}
+                priority
+              />
+            </Link>
+          </Button>
+
+          <LanguageSelector language={language} setLanguage={setLanguage} />
 
           <Button
             variant="ghost"

@@ -152,7 +152,8 @@ export default function HomeScreen() {
           try {
             abortControllerRef.current = new AbortController()
             const signal = abortControllerRef.current.signal
-            const backoffDelay = currentRetry === 0 ? 0 : Math.min(1000 * 2 ** (currentRetry - 1), 10000)
+            const backoffDelay =
+              currentRetry === 0 ? 0 : Math.min(1000 * 2 ** (currentRetry - 1), 10000)
             if (backoffDelay) await new Promise((r) => setTimeout(r, backoffDelay))
 
             const timeoutId = setTimeout(() => {
@@ -211,35 +212,52 @@ export default function HomeScreen() {
             const { answer, suggestions } = parseResponseClient(fullResponse)
             setStreamingResponse(enforceEnglish(answer || fullResponse))
             // Ensure fallback also has suggestions
-            const fallbackSuggestions = suggestions.length > 0 ? suggestions : [
-              'What is prenatal care?',
-              'What vitamins should I take during pregnancy?',
-              'How often should I visit my doctor during pregnancy?'
-            ]
+            const fallbackSuggestions =
+              suggestions.length > 0
+                ? suggestions
+                : [
+                    'What is prenatal care?',
+                    'What vitamins should I take during pregnancy?',
+                    'How often should I visit my doctor during pregnancy?',
+                  ]
             setStreamingSuggestions(fallbackSuggestions.map(enforceEnglish))
           }
         }
         await makeApiRequest()
 
         // Final parse & commit to message list
-        const { answer: finalParsedAnswer, suggestions: finalParsedSuggestions } = parseResponseClient(fullResponse)
+        const { answer: finalParsedAnswer, suggestions: finalParsedSuggestions } =
+          parseResponseClient(fullResponse)
         const finalAnswer = enforceEnglish(finalParsedAnswer || fullResponse)
         const finalSuggestions = finalParsedSuggestions.map(enforceEnglish)
-        
+
         // Ensure we always have some suggestions, fallback to default if none parsed
-        const ensuredSuggestions = finalSuggestions.length > 0 ? finalSuggestions : [
-          'What vitamins should I take during pregnancy?',
-          'How often should I have prenatal check-ups?', 
-          'What foods should I avoid during pregnancy?'
-        ]
-        
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, response: finalAnswer, suggestedQuestions: ensuredSuggestions } : m)))
+        const ensuredSuggestions =
+          finalSuggestions.length > 0
+            ? finalSuggestions
+            : [
+                'What vitamins should I take during pregnancy?',
+                'How often should I have prenatal check-ups?',
+                'What foods should I avoid during pregnancy?',
+              ]
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? { ...m, response: finalAnswer, suggestedQuestions: ensuredSuggestions }
+              : m
+          )
+        )
         setLastResponse(finalAnswer)
         setCurrentStreamingId(null)
         setTimeout(scrollToBottomForced, 100)
         setTimeout(scrollToBottom, 300) // Additional smooth scroll after content settles
       } catch (error) {
-        toast({ title: 'Error', description: 'Failed to submit question. Please try again.', variant: 'destructive' })
+        toast({
+          title: 'Error',
+          description: 'Failed to submit question. Please try again.',
+          variant: 'destructive',
+        })
         setCurrentStreamingId(null)
       } finally {
         setIsLoading(false)
@@ -248,7 +266,16 @@ export default function HomeScreen() {
         setTimeout(() => inputRef.current?.focus(), 100)
       }
     },
-    [input, language, scrollToBottom, scrollToBottomForced, maxRetries, toast, parseResponseClient, enforceEnglish]
+    [
+      input,
+      language,
+      scrollToBottom,
+      scrollToBottomForced,
+      maxRetries,
+      toast,
+      parseResponseClient,
+      enforceEnglish,
+    ]
   )
   // end handleSubmit
 
@@ -312,12 +339,11 @@ export default function HomeScreen() {
     return nodes
   }, [])
 
-
   useEffect(() => {
-  // Anonymous mode: skip server fetch to ensure no cross-user data exposure
-  setMessages([])
-  setLastResponse('')
-  setTimeout(scrollToBottom, 100)
+    // Anonymous mode: skip server fetch to ensure no cross-user data exposure
+    setMessages([])
+    setLastResponse('')
+    setTimeout(scrollToBottom, 100)
 
     // Clean up any pending requests when component unmounts
     return () => {
@@ -423,158 +449,192 @@ export default function HomeScreen() {
                       transition={{ duration: 0.25 }}
                       className="space-y-4"
                     >
-                        {/* User Message */}
-                        <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2 }}>
-                          <div className="w-full bg-muted/40 dark:bg-slate-800/40 border border-border rounded-xl p-4 shadow-sm">
-                            <div className="flex items-center mb-2 gap-2">
-                              <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                                <User className="w-3.5 h-3.5 text-foreground" />
-                              </div>
-                              <span className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">You</span>
+                      {/* User Message */}
+                      <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2 }}>
+                        <div className="w-full bg-muted/40 dark:bg-slate-800/40 border border-border rounded-xl p-4 shadow-sm">
+                          <div className="flex items-center mb-2 gap-2">
+                            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                              <User className="w-3.5 h-3.5 text-foreground" />
                             </div>
-                            <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words">{message.text}</div>
+                            <span className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                              You
+                            </span>
+                          </div>
+                          <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words">
+                            {message.text}
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* AI Assistant Message */}
+                      {message.id !== currentStreamingId && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, delay: 0.2 }}
+                        >
+                          <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed mb-5">
+                            <div className="flex items-center mb-3 gap-2">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                                <Image
+                                  src="/logo.png"
+                                  alt="Assistant"
+                                  width={28}
+                                  height={28}
+                                  className="object-contain"
+                                />
+                              </div>
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Prenatal Health Assistant
+                              </span>
+                            </div>
+                            <div className="text-sm text-foreground space-y-1">
+                              {renderFormatted(message.response)}
+                            </div>
+                            {message.suggestedQuestions?.length > 0 && (
+                              <div className="mt-5 pt-4 border-t border-border/60">
+                                <h3 className="text-xs font-semibold text-primary flex items-center gap-1 mb-2 tracking-wide uppercase">
+                                  <LightbulbIcon className="w-3.5 h-3.5" /> Suggested Questions
+                                </h3>
+                                <div className="flex flex-wrap gap-2">
+                                  {message.suggestedQuestions.map((q, idx) => (
+                                    <Button
+                                      key={idx}
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-xs h-auto py-1 px-2 rounded-lg border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary"
+                                      onClick={() => handleSubmit(q)}
+                                    >
+                                      {q}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </motion.div>
+                      )}
 
-                        {/* AI Assistant Message */}
-                        {message.id !== currentStreamingId && (
-                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-                            <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed mb-5">
-                              <div className="flex items-center mb-3 gap-2">
-                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-                                  <Image src="/logo.png" alt="Assistant" width={28} height={28} className="object-contain" />
+                      {/* Streaming Response (if this is the current streaming message) */}
+                      {message.id === currentStreamingId && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed">
+                            <div className="flex items-center mb-3 gap-2">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                                <Image
+                                  src="/logo.png"
+                                  alt="Assistant"
+                                  width={28}
+                                  height={28}
+                                  className="object-contain animate-pulse"
+                                />
+                              </div>
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Prenatal Health Assistant
+                              </span>
+                            </div>
+                            <div>
+                              {retryCount > 0 && (
+                                <div className="mb-2 text-accent flex items-center gap-1 text-sm">
+                                  <AlertCircle className="w-4 h-4" />
+                                  <span>
+                                    Retrying... ({retryCount}/{maxRetries})
+                                  </span>
                                 </div>
-                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prenatal Health Assistant</span>
-                              </div>
-                              <div className="text-sm text-foreground space-y-1">
-                                {renderFormatted(message.response)}
-                              </div>
-                              {message.suggestedQuestions?.length > 0 && (
-                                <div className="mt-5 pt-4 border-t border-border/60">
-                                  <h3 className="text-xs font-semibold text-primary flex items-center gap-1 mb-2 tracking-wide uppercase">
-                                    <LightbulbIcon className="w-3.5 h-3.5" /> Suggested Questions
+                              )}
+                              {streamingResponse ? (
+                                <div className="break-words text-foreground whitespace-pre-wrap leading-relaxed space-y-1">
+                                  {renderFormatted(streamingResponse)}
+                                  <motion.span
+                                    className="inline-block"
+                                    animate={{ opacity: [0, 1, 0] }}
+                                    transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5 }}
+                                  >
+                                    ▌
+                                  </motion.span>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1 py-2">
+                                  <motion.div
+                                    className="w-2 h-2 bg-primary rounded-full"
+                                    animate={{ scale: [1, 1.2, 1] }}
+                                    transition={{
+                                      repeat: Number.POSITIVE_INFINITY,
+                                      duration: 1,
+                                      delay: 0,
+                                    }}
+                                  />
+                                  <motion.div
+                                    className="w-2 h-2 bg-primary rounded-full"
+                                    animate={{ scale: [1, 1.2, 1] }}
+                                    transition={{
+                                      repeat: Number.POSITIVE_INFINITY,
+                                      duration: 1,
+                                      delay: 0.2,
+                                    }}
+                                  />
+                                  <motion.div
+                                    className="w-2 h-2 bg-primary rounded-full"
+                                    animate={{ scale: [1, 1.2, 1] }}
+                                    transition={{
+                                      repeat: Number.POSITIVE_INFINITY,
+                                      duration: 1,
+                                      delay: 0.4,
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Streaming Suggestions */}
+                            {streamingSuggestions.length > 0 && (
+                              <motion.div
+                                className="mt-5 pt-4 border-t border-border/60 flex flex-wrap gap-2"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3 }}
+                              >
+                                <div className="mt-2 w-full">
+                                  <h3 className="text-sm font-medium text-primary flex items-center">
+                                    <LightbulbIcon className="w-4 h-4 mr-2" />
+                                    Suggested Questions
                                   </h3>
-                                  <div className="flex flex-wrap gap-2">
-                                    {message.suggestedQuestions.map((q, idx) => (
-                                      <Button key={idx} variant="outline" size="sm" className="text-xs h-auto py-1 px-2 rounded-lg border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary" onClick={() => handleSubmit(q)}>
-                                        {q}
-                                      </Button>
-                                    ))}
-                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-
-                        {/* Streaming Response (if this is the current streaming message) */}
-                        {message.id === currentStreamingId && (
-                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                            <div className="w-full bg-background border border-border rounded-xl p-5 shadow-sm leading-relaxed">
-                              <div className="flex items-center mb-3 gap-2">
-                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-                                  <Image src="/logo.png" alt="Assistant" width={28} height={28} className="object-contain animate-pulse" />
-                                </div>
-                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prenatal Health Assistant</span>
-                              </div>
-                              <div>
-                                {retryCount > 0 && (
-                                  <div className="mb-2 text-accent flex items-center gap-1 text-sm">
-                                    <AlertCircle className="w-4 h-4" />
-                                    <span>
-                                      Retrying... ({retryCount}/{maxRetries})
-                                    </span>
-                                  </div>
-                                )}
-                                {streamingResponse ? (
-                                  <div className="break-words text-foreground whitespace-pre-wrap leading-relaxed space-y-1">
-                                    {renderFormatted(streamingResponse)}
-                                    <motion.span
-                                      className="inline-block"
-                                      animate={{ opacity: [0, 1, 0] }}
-                                      transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5 }}
+                                <div className="flex flex-wrap gap-2 max-w-full">
+                                  {streamingSuggestions.map((question, idx) => (
+                                    <motion.div
+                                      key={idx}
+                                      initial={{ opacity: 0, scale: 0.9 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      transition={{ duration: 0.3, delay: idx * 0.1 }}
+                                      whileHover={{ scale: 1.03 }}
+                                      whileTap={{ scale: 0.97 }}
                                     >
-                                      ▌
-                                    </motion.span>
-                                  </div>
-                                ) : (
-                                  <div className="flex gap-1 py-2">
-                                    <motion.div
-                                      className="w-2 h-2 bg-primary rounded-full"
-                                      animate={{ scale: [1, 1.2, 1] }}
-                                      transition={{
-                                        repeat: Number.POSITIVE_INFINITY,
-                                        duration: 1,
-                                        delay: 0,
-                                      }}
-                                    />
-                                    <motion.div
-                                      className="w-2 h-2 bg-primary rounded-full"
-                                      animate={{ scale: [1, 1.2, 1] }}
-                                      transition={{
-                                        repeat: Number.POSITIVE_INFINITY,
-                                        duration: 1,
-                                        delay: 0.2,
-                                      }}
-                                    />
-                                    <motion.div
-                                      className="w-2 h-2 bg-primary rounded-full"
-                                      animate={{ scale: [1, 1.2, 1] }}
-                                      transition={{
-                                        repeat: Number.POSITIVE_INFINITY,
-                                        duration: 1,
-                                        delay: 0.4,
-                                      }}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Streaming Suggestions */}
-                {streamingSuggestions.length > 0 && (
-                                <motion.div
-                  className="mt-5 pt-4 border-t border-border/60 flex flex-wrap gap-2"
-                                  initial={{ opacity: 0, y: 10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  transition={{ duration: 0.3 }}
-                                >
-                                  <div className="mt-2 w-full">
-                                    <h3 className="text-sm font-medium text-primary flex items-center">
-                                      <LightbulbIcon className="w-4 h-4 mr-2" />
-                                      Suggested Questions
-                                    </h3>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2 max-w-full">
-                                    {streamingSuggestions.map((question, idx) => (
-                                      <motion.div
-                                        key={idx}
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ duration: 0.3, delay: idx * 0.1 }}
-                                        whileHover={{ scale: 1.03 }}
-                                        whileTap={{ scale: 0.97 }}
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          scrollToBottom()
+                                          handleSubmit(question)
+                                        }}
+                                        className="text-wrap h-auto text-left p-2 rounded-xl border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary"
                                       >
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            scrollToBottom()
-                                            handleSubmit(question)
-                                          }}
-                                          className="text-wrap h-auto text-left p-2 rounded-xl border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary"
-                                        >
-                                          {question}
-                                        </Button>
-                                      </motion.div>
-                                    ))}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </motion.div>
-                    ))}
+                                        {question}
+                                      </Button>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </motion.div>
+                  ))}
                 </AnimatePresence>
 
                 {/* Welcome Message and Default Suggestions */}
@@ -684,7 +744,7 @@ export default function HomeScreen() {
           </main>
         </div>
       </div>
-  {/* SpeechDebug removed */}
+      {/* SpeechDebug removed */}
     </div>
   )
 }

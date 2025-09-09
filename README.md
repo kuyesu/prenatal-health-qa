@@ -13,19 +13,21 @@ A comprehensive NextJS API backend for the Prenatal Health mobile application, p
 
 ## 📋 Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - MongoDB database
 - npm or yarn
 
 ## 🛠️ Installation
 
 1. **Clone and install dependencies:**
+
 ```bash
 npm install
 ```
 
 2. **Set up environment variables:**
-Create a `.env` file in the root directory:
+   Create a `.env` file in the root directory:
+
 ```env
 DATABASE_URL="mongodb+srv://username:password@cluster.mongodb.net/database"
 JWT_SECRET="your-super-secret-jwt-key"
@@ -35,6 +37,7 @@ NEXTAUTH_URL="http://localhost:3000"
 ```
 
 3. **Set up the database:**
+
 ```bash
 # Push schema to database
 npx prisma db push
@@ -44,6 +47,7 @@ npm run db:seed
 ```
 
 4. **Start the development server:**
+
 ```bash
 npm run dev
 ```
@@ -53,27 +57,32 @@ The API will be available at `http://localhost:3000/api`
 ## 📚 API Documentation
 
 ### Quick Test
+
 Visit `http://localhost:3000/api/status` to verify the API is running and see available endpoints.
 
 ### Authentication Endpoints
+
 - `POST /api/auth/signup` - Register new user
 - `POST /api/auth/login` - User login
 - `POST /api/auth/refresh` - Refresh access token
 - `POST /api/auth/logout` - Logout and revoke tokens
 
 ### User Management
+
 - `GET /api/user/profile` - Get user profile
 - `PUT /api/user/profile` - Update user profile
 - `POST /api/user/onboarding` - Complete onboarding
 - `GET /api/user/onboarding` - Get onboarding data
 
 ### Chat System
+
 - `POST /api/chat/sessions` - Create new chat session
 - `GET /api/chat/sessions` - Get user's chat sessions
 - `POST /api/chat/sessions/[id]` - Send message to session
 - `GET /api/chat/sessions/[id]` - Get session with messages
 
 ### Content APIs
+
 - `GET /api/health-tips` - Get health tips (filterable by week/category)
 - `GET /api/faqs` - Get FAQs (searchable and filterable)
 - `POST /api/analytics` - Track events
@@ -118,6 +127,7 @@ The API uses JWT authentication with access and refresh tokens:
 2. **Refresh Token**: Long-lived (7 days), used to get new access tokens
 
 Include the access token in the Authorization header:
+
 ```
 Authorization: Bearer <access_token>
 ```
@@ -137,6 +147,7 @@ This API is designed to work with the React Native mobile app. The mobile app's 
 All endpoints return JSON responses with this structure:
 
 **Success Response:**
+
 ```json
 {
   "success": true,
@@ -145,6 +156,7 @@ All endpoints return JSON responses with this structure:
 ```
 
 **Error Response:**
+
 ```json
 {
   "error": "Error message description"
@@ -154,6 +166,7 @@ All endpoints return JSON responses with this structure:
 ## 🔍 Monitoring and Analytics
 
 The API includes built-in analytics tracking for:
+
 - User login/signup events
 - Chat interactions
 - Health tip views
