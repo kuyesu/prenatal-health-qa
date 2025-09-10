@@ -41,14 +41,17 @@ export default function HealthHeader({
   useEffect(() => {
     const generateQRCode = async () => {
       try {
-        const qrDataUrl = await QRCode.toDataURL('https://expo.dev/artifacts/eas/sRgSEDFW5TPxWHmSu6LGSS.apk', {
-          width: 200,
-          margin: 2,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
+        const qrDataUrl = await QRCode.toDataURL(
+          'https://expo.dev/artifacts/eas/iAA8B91Zz8ck2kRywGnhZj.apk',
+          {
+            width: 200,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF',
+            },
           }
-        })
+        )
         setQrCodeDataUrl(qrDataUrl)
       } catch (error) {
         console.error('Error generating QR code:', error)
