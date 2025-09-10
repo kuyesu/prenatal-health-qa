@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Heart, Moon, Sun, Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { useTheme } from 'next-themes'
 import LanguageSelector from './language-selector'
 import type { Language } from '../types'
 import Image from 'next/image'
+import QRCode from 'qrcode'
 import {
   Dialog,
   DialogTrigger,
@@ -16,7 +17,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import Link from 'next/link'
 
 interface HealthHeaderProps {
   language: Language
@@ -35,6 +35,28 @@ export default function HealthHeader({
 }: HealthHeaderProps) {
   const { theme, setTheme } = useTheme()
   const [isHovered, setIsHovered] = useState(false)
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('')
+
+  // Generate QR code when component mounts
+  useEffect(() => {
+    const generateQRCode = async () => {
+      try {
+        const qrDataUrl = await QRCode.toDataURL('https://expo.dev/artifacts/eas/sRgSEDFW5TPxWHmSu6LGSS.apk', {
+          width: 200,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        })
+        setQrCodeDataUrl(qrDataUrl)
+      } catch (error) {
+        console.error('Error generating QR code:', error)
+      }
+    }
+
+    generateQRCode()
+  }, [])
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -81,28 +103,53 @@ export default function HealthHeader({
         </div>
 
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Download on Google Play"
-            className="h-auto px-0 py-0 bg-transparent hover:bg-transparent focus:bg-transparent active:bg-transparent hover:scale-105 focus:scale-105 active:scale-95 transition-transform"
-          >
-            <Link
-              href={'https://expo.dev/artifacts/eas/sRgSEDFW5TPxWHmSu6LGSS.apk'}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Image
-                src="/Store_Google_Play_Type_Dark.svg"
-                alt="Get it on Google Play"
-                width={120}
-                height={36}
-                style={{ height: 'auto', width: 'auto', maxWidth: '120px', maxHeight: '36px' }}
-                priority
-              />
-            </Link>
-          </Button>
-
+          <Dialog>
+            <DialogTrigger asChild className='bg-transparent'>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Download on Google Play"
+                className="h-auto px-0 py-0 bg-transparent hover:bg-transparent focus:bg-transparent active:bg-transparent hover:scale-105 focus:scale-105 active:scale-95 transition-transform"
+              >
+                <Image
+                  src="/Store_Google_Play_Type_Dark.svg"
+                  alt="Get it on Google Play"
+                  width={120}
+                  height={36}
+                  style={{ height: 'auto', width: 'auto', maxWidth: '120px', maxHeight: '36px' }}
+                  priority
+                />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Download the Prenatal Health App</DialogTitle>
+                <DialogDescription>
+                  Scan the QR code below to download from the app store
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col items-center space-y-4 py-4">
+                <div className="p-4 rounded-lg shadow-sm bg-white">
+                  {qrCodeDataUrl ? (
+                    <Image 
+                      src={qrCodeDataUrl} 
+                      alt="App Download QR Code" 
+                      width={200} 
+                      height={200}
+                      className="rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-[200px] h-[200px] flex items-center justify-center bg-gray-100 rounded-lg">
+                      <span className="text-gray-500">Generating QR Code...</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  Point your camera at the QR code to download the app
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
           <LanguageSelector language={language} setLanguage={setLanguage} />
 
           <Button
